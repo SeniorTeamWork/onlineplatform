@@ -1,0 +1,142 @@
+.topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--header-height);
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--fs-h2);
+  font-weight: 700;
+}
+.brand > span {
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--surface);
+  font-size: var(--fs-h3);
+}
+.header-account {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: var(--fs-base);
+}
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: var(--header-height);
+  bottom: 0;
+  width: var(--sidebar-width);
+  padding: 25px 18px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  z-index: 30;
+}
+.nav-label {
+  padding: 0 12px;
+}
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  font-size: var(--fs-base);
+  margin: 6px 0;
+}
+.sidebar nav a.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+.sidebar-bottom {
+  padding: 28px 12px;
+}
+.subnav {
+  padding-left: 18px;
+  border-left: 2px solid var(--primary-border);
+  margin-left: 20px;
+}
+.subnav a {
+  overflow-wrap: anywhere;
+}
+.course-toggle {
+  font-size: var(--fs-small);
+}
+.main-wrap {
+  margin-left: var(--sidebar-width);
+  padding-top: var(--header-height);
+}
+main {
+  padding: 36px;
+  max-width: 1500px;
+  margin: auto;
+  min-height: calc(100vh - var(--header-height));
+}
+footer {
+  padding: 24px 36px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.mobile-menu {
+  display: none;
+}
+@media (max-width: 1000px) {
+  .mobile-menu {
+    display: inline-flex;
+  }
+  .sidebar {
+    display: none;
+    width: min(90vw, 360px);
+    box-shadow: var(--shadow);
+  }
+  .sidebar.open {
+    display: block;
+  }
+  .main-wrap {
+    margin-left: 0;
+  }
+  .header-account > span {
+    display: none;
+  }
+  .topbar {
+    padding: 14px 18px;
+  }
+  main {
+    padding: 25px 18px;
+  }
+  .topbar .brand {
+    font-size: var(--fs-medium);
+  }
+  .topbar .secondary {
+    padding: 10px 12px;
+  }
+  .brand > span {
+    padding: 4px 8px;
+  }
+}
+@media (max-width: 600px) {
+  .topbar .brand > span {
+    display: none;
+  }
+  .topbar .brand {
+    font-size: var(--fs-base);
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .header-account {
+    gap: 8px;
+  }
+}

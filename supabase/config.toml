@@ -1,0 +1,4 @@
+project_id = "ai-academy"
+[functions.academy]
+verify_jwt = false
+# JWT is verified explicitly via auth.getUser(token) inside the function.

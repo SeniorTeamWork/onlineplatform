@@ -1,0 +1,39 @@
+.protected-video {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--video-bg);
+}
+.video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: var(--video-bg);
+}
+.video-watermark {
+  position: absolute;
+  top: 15%;
+  left: 8%;
+  z-index: 2;
+  pointer-events: none;
+  color: var(--watermark);
+  text-shadow: 0 1px 3px var(--video-bg);
+  font-size: var(--fs-small);
+  max-width: 85%;
+  overflow-wrap: anywhere;
+}
+.video-empty {
+  aspect-ratio: 16/9;
+  background: var(--video-bg);
+  color: var(--video-text);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.video-empty p {
+  color: var(--video-text);
+}
