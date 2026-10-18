@@ -11,7 +11,7 @@
     "test:server": "node tests/server.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0",
+    "@supabase/supabase-js": "^2.118.0",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
