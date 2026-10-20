@@ -1,7 +1,7 @@
-import { supabase } from './supabase';
+import { supabase, supabaseConfigError } from './supabase';
 export const cloudEnabled = process.env.REACT_APP_DATA_MODE !== 'demo';
 export async function api(action, payload = {}) {
-  if (!supabase) throw Error('Supabase URL va publishable key .env faylida kiritilmagan.');
+  if (!supabase) throw Error(supabaseConfigError);
   const {
     data,
     error

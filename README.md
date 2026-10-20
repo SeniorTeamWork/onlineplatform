@@ -1,3 +1,5 @@
+> Supabase ulanishini sozlash: avval **BOSHLASH.md** faylini oching.
+
 # AI Academy CRA v6 — Supabase
 
 V5.1 sahifalari, yo‘llari va dizayni saqlandi. Supabase Auth, server API, private Storage, admin to‘lovlari, kirim/chiqim, serverda test baholash va foydalanuvchi ruxsatlari qo‘shildi.

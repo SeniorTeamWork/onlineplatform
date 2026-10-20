@@ -1,7 +1,7 @@
 import { createContext, useContext, useRef, useState, useEffect } from 'react';
 import { read, write, migrate } from '../services/db';
 import { cloudEnabled, api } from '../services/cloud';
-import { supabase } from '../services/supabase';
+import { supabase, supabaseConfigError } from '../services/supabase';
 const Context = createContext(null);
 const empty = () => migrate({
   users: [],
@@ -58,7 +58,7 @@ export function AppProvider({
     }
     if (!supabase) {
       setLoading(false);
-      setNotice('Supabase .env sozlamalari kiritilmagan. README-SUPABASE.md faylini oching.');
+      setNotice(supabaseConfigError);
       return;
     }
     let alive = true;
@@ -159,7 +159,7 @@ export function AppProvider({
   }
   async function login(email, password, remember = true) {
     if (cloudEnabled) {
-      if (!supabase) throw Error('Supabase sozlamalarini kiriting.');
+      if (!supabase) throw Error(supabaseConfigError);
       sessionStorage.setItem('academy-remember', remember ? 'yes' : 'no');
       const {
         data,

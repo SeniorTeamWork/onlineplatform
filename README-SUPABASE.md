@@ -1,144 +1,74 @@
-# AI Academy v6 — Supabasega qadamma-qadam ulash
+# AI Academy — .env + supabase.js bilan ulash
 
-Bu ZIPda frontend va server kodi birga. V5.1 sahifalari, marshrutlari, JSX/CSS joylashuvi saqlangan. Endi `REACT_APP_DATA_MODE=supabase` bilan haqiqiy Auth, server API va Storage ishlatiladi. URL/key kiritmasdan va SQL/Edge Functionni joylamasdan onlayn rejim ishlamaydi.
+Bu papkada oldingi sayt sahifalari, dizayni, JSX/CSS, marshrutlari va biznes qoidalari saqlangan. Ulanish konfiguratsiyasi faqat .env va src/supabase.js orqali ishlaydi. JSON konfiguratsiyasi olib tashlangan.
 
-## 1. Papkani oching
+## 1. Asosiy papka
 
-ZIPni oching, VS Code orqali `ai-academy-cra` papkasini oching. Terminal `package.json` joylashgan papkada bo‘lsin. Node.js 22 yoki yangi versiya ishlating.
+VS Code’da ichida package.json, .env, src va supabase mavjud bo‘lgan ai-academy-cra papkasini oching. .env fayli tayyor qo‘shilgan.
 
-```powershell
-npm install
-```
-
-## 2. Supabase loyihasi
-
-https://supabase.com/dashboard → New project → `ai-academy`. Database parolini o‘zingizda saqlang. Quyidagilar kerak bo‘ladi:
-- Project URL: `https://PROJECT_REF.supabase.co`
-- Publishable key: `sb_publishable_...`
-- Project ref: URLdagi `PROJECT_REF` qismi.
-
-Auth → Providers/Sign In sozlamalarida Email login yoqilgan bo‘lsin. Ochiq ro‘yxatdan o‘tishni o‘chirish mumkin: talabani admin yaratadi. Auth → URL Configuration: Site URLga Vercel domeningizni, Redirect URLsga `http://localhost:3000` va Vercel domeningizni kiriting.
-
-## 3. Baza va Storage — SQL Editor
-
-Supabase → SQL Editor → New query.
-
-`supabase/schema.sql` faylini to‘liq nusxalab, SQL Editorga qo‘ying → Run.
-
-`supabase/migrations/202610180001_academy.sql` shu sxemaning aynan nusxasi. Manual SQL usulida ikkalasini alohida bajarish shart emas. Oldingi v5.1 sxemasi bajarilgan bo‘lsa ham bu migratsiya eski jadvallarni o‘chirmaydi. V6 boshqa `academy_state`, `academy_audit` jadvallaridan foydalanadi.
-
-Yaratiladi:
-- `academy_state`: kurslar, talabalar profillari, enrollmentlar, to‘lovlar, xarajatlar, test sessiyalari/natijalari, amaliy ishlar, progress, sertifikatlar va murojaatlar JSONB hujjati.
-- `academy_audit`: serverdagi yozish amallari tarixi — foydalanuvchi, amal, revision, vaqt.
-- `academy-media`: admin yuklaydigan video/materiallar, private, 200 MBgacha.
-- `academy-student-media`: o‘quvchi rasmi/amaliy fayllari, private, 20 MBgacha.
-
-Loyiha tarifidagi global Storage hajmi/limitlari ham amal qiladi. Video formati MP4 yoki WebM. Profil rasmi interfeysda 3 MB bilan cheklangan. Yuklash vaqtida internet barqaror bo‘lsin; bu versiya standard signed upload ishlatadi, resumable/TUS hali qo‘shilmagan.
-
-## 4. Birinchi adminni yarating
-
-Supabase → Authentication → Users → Add user/Create user orqali o‘zingizning emailingiz va kuchli parolingiz bilan foydalanuvchi yarating. Emailni tasdiqlang/auto-confirmni belgilang.
-
-`supabase/BOOTSTRAP-ADMIN.sql`ni oching. `YOUR_ADMIN_EMAIL`ni aynan o‘sha emailga almashtiring. SQL Editorda bajaring.
-
-Endi ushbu Auth hisobida admin roli mavjud. Demo `admin@academy.uz / Admin123!` avtomatik yaratilmaydi. Ikkinchi admin kerak bo‘lsa, boshqa Auth hisobini yarating va shu bootstrapni o‘sha email bilan bajaring.
-
-## 5. Edge Functionni deploy qiling
-
-Quyidagi buyruqlar VS Code terminalida, `package.json` yonida bajariladi:
-
-```powershell
-npx supabase login
-npx supabase functions deploy academy --project-ref YOUR_PROJECT_REF --no-verify-jwt
-```
-
-`YOUR_PROJECT_REF`ni o‘zingizning loyiha identifikatoringizga almashtiring. CLI login brauzer orqali o‘z Supabase hisobingizga kirishni so‘raydi. Deploydan so‘ng Dashboard → Edge Functions ichida `academy` ko‘rinadi.
-
-`--no-verify-jwt` API ochiq degani emas: funksiyaning boshida har bir so‘rov JWTsi `auth.getUser(token)` bilan tekshiriladi, so‘ng rol va faol holat tekshiriladi. Token bo‘lmasa yozish ham, o‘qish ham ishlamaydi.
-
-Supabase hosted Edge Functionda `SUPABASE_URL` va `SUPABASE_SERVICE_ROLE_KEY` server muhiti orqali olinadi. Ular brauzerga uzatilmaydi. Agar hosting muhitida ushbu server kaliti mavjud bo‘lmasa, Edge Function secretsni Supabase hujjatiga muvofiq sozlang; uni CRA `.env`ga qo‘ymang.
-
-## 6. Frontend `.env`
-
-`package.json` yonida `.env.example`dan nusxa oling:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-`.env` ichida:
+## 2. .env
 
 ```env
 REACT_APP_DATA_MODE=supabase
-REACT_APP_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-REACT_APP_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+REACT_APP_SUPABASE_URL=https://hbxnamucmrbzcyfdxznz.supabase.co
+REACT_APP_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-Keyin:
+Oxirgi qatorda = belgisidan keyin aynan shu loyihaning Publishable key qiymatini yozing. Secret/service_role key va database parolini frontendga yozmang. Login va parol .env ga kiritilmaydi, ular Supabase Authentication hisobiga tegishli.
 
-```powershell
+Eski .env.local, .env.development.local yoki .env.production.local ichida boshqa URL/key bo‘lsa ular CRA tartibiga ko‘ra ustun turishi mumkin. Shu fayllarni ham aynan ushbu loyiha qiymatlariga moslang. Terminalda ilgari belgilangan environment qiymatlari ham ustun turishi mumkin. REACT_APP_SUPABASE_ANON_KEY nomi legacy anon key uchun moslik sifatida qo‘llab-quvvatlanadi; tavsiya etilgan nom yuqorida.
+
+## 3. Terminal
+
+```bash
+npm install
+npm run check:supabase
 npm start
 ```
 
-Login sahifasiga 4-qadamdagi haqiqiy admin email/parolini kiriting. `.env` o‘zgarsa serverni Ctrl+C orqali to‘xtatib, qayta ishga tushiring.
+.env o‘zgargach Ctrl+C qilib serverni to‘xtating va yana npm start qiling. Brauzer ochgan localhost:3000 yoki 3001 manzilidan foydalaning. Vercel majburiy emas.
 
-## 7. Admin orqali tekshiring
+## 4. Qaysi fayl nima qiladi
 
-1. Kurs yarating va narx kiriting.
-2. Birinchi/ikkinchi darsni yarating, testlari va videolarini qo‘shing, e’lon qiling.
-3. Talaba qo‘shing. Email noyob, boshlang‘ich parol kamida 8 belgi; kurslarni checkbox bilan tanlang. Holat: Faol/Nofaol/Depozit.
-4. Boshlang‘ich to‘lovsiz talaba hisobida faqat birinchi dars ochilishini tekshiring.
-5. Admin talaba + kursni tanlab qisman to‘lov kiritsin. Qarz kamayadi; keyingi dars oldingi video yakunlangach va test >70% bo‘lgach ochiladi.
-6. O‘quvchi yangi brauzer yoki inkognito oynada kirsin: fayllar va natijalar u yerda ham ko‘rinishi kerak.
-7. Amaliy ish yuboring, admin baholasin; barcha natijalar talaba sahifasida qoladi.
-8. Moliya ichida chiqim qo‘shing. Kirim, chiqim, qoldiq hisoblanadi. To‘lovlar faqat admin tomonidan kiritiladi, bank integratsiyasi yo‘q.
-9. Profilni o‘zgartiring. Email almashsa, Supabase yuborgan tasdiqlash xatini bajaring. Parollar bazadagi profilga yozilmaydi; admin talaba sahifasidan yangi parol belgilashi mumkin.
-10. Barcha dars/video/test/amaliy shartlar bajarilgach sertifikatni yuklang.
+- .env: URL va Publishable key.
+- src/supabase.js: yagona createClient, sozlama tekshiruvi, sessiyani saqlash va tokenni yangilash.
+- src/services/supabase.js: eski importlar uchun o‘sha clientni qayta eksport qiladi; ikkinchi client yaratilmaydi.
+- src/services/cloud.js: mavjud academy backendiga so‘rov, video/material yuklash va o‘qish.
+- src/context/AppContext.jsx: mavjud login, saqlash va rollarni boshqarish.
 
-Boshqa hisobdagi o‘zgarishni olish uchun sahifani yangilang. Realtime obuna yo‘q. Parallel yozishda revision tekshiruvi eski ma’lumot bilan yangisini bosib ketishga yo‘l qo‘ymaydi: xabar chiqadi, yangilangan ma’lumot keladi, amalni qayta yuborasiz. Hamma to‘lov/holat bir tranzaksiyada saqlanadi. Auth foydalanuvchini yaratish alohida xizmat bo‘lgani uchun, DB saqlash xatosida yangi Auth hisobini o‘chirish kompensatsiyasi ishlatiladi.
+## 5. Mavjud Supabase bazasi
+
+Oldingi SQL bajarilgan bo‘lsa ma’lumotlarni tozalash shart emas. SQL sxema va backend kodi o‘zgarmadi.
+
+Yangi bazada supabase/schema.sql ni SQL Editor’da bajaring. Authentication → Users orqali adminni yarating va tasdiqlang. supabase/BOOTSTRAP-ADMIN.sql ichidagi YOUR_ADMIN_EMAIL ni o‘sha email bilan almashtirib bajaring. Ro‘yxatdan o‘tgan adminni takroran qo‘shmang.
+
+## 6. academy funksiyasi
+
+.env bilan Supabase clientini yaratish backendni avtomatik joylamaydi. Mavjud funksiyalarimiz shu backenddan foydalanadi. academy allaqachon aynan shu loyihaga joylangan bo‘lsa qaytadan deploy shart emas.
+
+Siz yuborgan sahifada funksiya hali yo‘q edi. Bir marta quyidagilarni terminalda bajaring:
+
+```bash
+npx supabase login
+npx supabase projects list
+npx supabase functions deploy academy --project-ref hbxnamucmrbzcyfdxznz --no-verify-jwt
+```
+
+Login qilganda kerakli Google/Supabase hisobini tanlang. projects list ichida hbxnamucmrbzcyfdxznz ko‘rinishi kerak. Boshqa hisobga kirgan bo‘lsangiz npx supabase logout qilib, kerakli hisob bilan qayta login qiling. Function o‘z kodida har bir so‘rov tokeni, rol va active holatini tekshiradi.
+
+## 7. Xatolarni ajratish
+
+- Sozlamalar xatosi: .env to‘ldirilganini tekshiring va serverni qayta yoqing.
+- Invalid login credentials: aynan ushbu loyihadagi Auth email/parolini kiriting.
+- Failed to send a request to the Edge Function: Network’da academy so‘rovini tekshiring. Oldingi tekshiruvda bu loyiha 404 Requested function was not found qaytargan; buning yechimi yuqoridagi backend deploy.
+- Hisob faol emas yoki biriktirilmagan: admin bootstrap yoki talaba biriktirishini tekshiring.
 
 ## 8. Vercel
 
-GitHubga `.env`, `node_modules`, `build`ni yubormang. Vercel → Settings → Environment Variablesga 6-qadamdagi uchta qiymatni kiriting. Framework Create React App, Build Command `npm run build`, Output `build`. Keyin Redeploy.
+Settings → Environment Variables ichiga yuqoridagi uchta qiymatni kiriting, keyin Redeploy qiling. .env gitignore’da, uni GitHubga push qilmang. Build Command npm run build, Output Directory build. JSON yoki JS ichiga kalit yozish kerak emas.
 
-Supabase Functionni deploy qilish bilan Vercel frontend deployi ikki alohida amal. Backendni yangilasangiz 5-qadamdagi function deploy buyrug‘ini qayta bajaring.
+## 9. Ishlashni tekshirish
 
-## Fayllar xaritasi
+Haqiqiy admin bilan login qiling. Kurs, talaba, to‘lov yarating va sahifani yangilang. O‘quvchi hisobida dars/video/test/amaliyot/materiallarni tekshiring. Baza va Storage’dagi yozuvlar saqlanganini tekshiring.
 
-| Fayl | Vazifa |
-|---|---|
-| `src/services/supabase.js` | Auth client, sessiya saqlash |
-| `src/services/cloud.js` | Edge API va private fayllar |
-| `src/context/AppContext.jsx` | Cloud/demo rejim, async saqlash |
-| `src/services/db.js` | Interfeys hisoblari va demo yordamchilari |
-| `supabase/functions/academy/index.ts` | JWT/rol, Auth admin, upload/media, tranzaksiya |
-| `supabase/functions/_shared/logic.js` | Ruxsat, server baholash, filtrlangan ma’lumot |
-| `supabase/functions/_shared/domain.js` | Serverdagi biznes qoidalari |
-| `supabase/schema.sql` | Ishlaydigan backend uchun SQL |
-| `supabase/BOOTSTRAP-ADMIN.sql` | Birinchi adminni bog‘lash |
-
-## Saqlash arxitekturasi va tekshiruv chegarasi
-
-V6 mavjud frontend modelini saqlash uchun barcha biznes metama’lumotlarni bitta server-only JSONB hujjatida saqlaydi. Brauzer bu jadvalga to‘g‘ridan-to‘g‘ri kira olmaydi: RLS yoqilgan va anon/authenticated huquqlari olib tashlangan. Edge Function o‘quvchiga faqat o‘z ma’lumotlarini beradi. To‘g‘ri test javoblari va yopiq dars fayllari talaba javobiga kirmaydi. Fayllarning o‘zi Storage, parollar esa Authda.
-
-Bu kichik platforma uchun boshlang‘ich backend; juda ko‘p talabalar va katta tarixda hujjatni to‘liq o‘qish/yozish qimmatlashadi. Shunda alohida relational jadvallar, pagination va alohida tranzaksiyalarga ajratish kerak bo‘ladi. Eski localStorage/IndexedDB ma’lumotlari avtomatik import qilinmaydi. Eski brauzer ma’lumotlarini o‘chirmang; kurslar/fayllarni admin orqali qayta kiriting yoki alohida migratsiya yozing.
-
-62 ta biznes qoida, 17 ta server ruxsat/baholash testi, 14 ta React testi va production build tekshirilgan. Sizning Supabase loyihangizga kirish yo‘qligi sababli SQLni real bazada bajarish, Edge deploy, haqiqiy Auth/Storage va ikki brauzerli end-to-end tekshiruv hali bajarilmagan. 7-qadamni real loyiha ochilgach bajaring. Brauzerda screenshot/screen recordingni mutlaq bloklash imkoni yo‘q; video watermark va odatiy download cheklovi saqlangan.
-
-## Test buyruqlari
-
-```powershell
-npm run test:domain
-npm run test:server
-npm test -- --watch=false --runInBand
-npm run build
-```
-
-Faqat eski demo ko‘rinishini ochish uchun `.env`da `REACT_APP_DATA_MODE=demo` yozing. Bu rejim haqiqiy bazaga yozmaydi.
-
-## Rasmiy manbalar
-
-- https://supabase.com/docs/guides/functions/deploy
-- https://supabase.com/docs/guides/functions/secrets
-- https://supabase.com/docs/reference/javascript/auth-getuser
-- https://supabase.com/docs/guides/storage/buckets/fundamentals
+Eski localStorage ma’lumotlari avtomatik import qilinmaydi. Haqiqiy Publishable key taqdim etilmaganligi sabab ZIPda bo‘sh. Sizning loyihangizga bu ZIP avtomatik deploy qilinmagan va jonli Auth/SQL/Storage end-to-end sinovi hali bajarilmagan.

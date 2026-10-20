@@ -8,10 +8,11 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "test:domain": "node tests/domain.mjs",
-    "test:server": "node tests/server.mjs"
+    "test:server": "node tests/server.mjs",
+    "check:supabase": "node scripts/check-supabase.cjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
+    "@supabase/supabase-js": "^2.0.0",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

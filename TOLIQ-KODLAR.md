@@ -1,6 +1,86 @@
-# AI Academy v6 — to‘liq frontend va backend kodlari
+# AI Academy — faylma-fayl to‘liq kodlar
 
-Sozlash: README-SUPABASE.md
+Avval BOSHLASH.md ni o‘qing.
+
+## .env
+
+```text
+REACT_APP_DATA_MODE=supabase
+REACT_APP_SUPABASE_URL=https://hbxnamucmrbzcyfdxznz.supabase.co
+REACT_APP_SUPABASE_PUBLISHABLE_KEY=
+
+```
+
+## .env.example
+
+```text
+REACT_APP_DATA_MODE=supabase
+REACT_APP_SUPABASE_URL=https://hbxnamucmrbzcyfdxznz.supabase.co
+REACT_APP_SUPABASE_PUBLISHABLE_KEY=
+
+```
+
+## package.json
+
+```json
+{
+  "name": "ai-academy-cra",
+  "version": "6.0.0",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "test:domain": "node tests/domain.mjs",
+    "test:server": "node tests/server.mjs",
+    "check:supabase": "node scripts/check-supabase.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "jspdf": "^3.0.4",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.0.0",
+    "react-scripts": "5.0.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js"
+    }
+  }
+}
+
+```
+
+## vercel.json
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+
+```
 
 ## src/App.jsx
 
@@ -382,6 +462,69 @@ test('profile page exposes photo and credential fields', async () => {
   expect(host.querySelector('input[type="file"]')).not.toBeNull();
   expect(host.querySelector('input[name="current"]')).not.toBeNull();
   expect(host.querySelector('input[name="phone"]')).not.toBeNull();
+});
+
+```
+
+## src/__tests__/supabase-config.test.js
+
+```javascript
+import { validateSupabaseConfig } from '../supabase';
+jest.mock('@supabase/supabase-js', () => ({ createClient: jest.fn(() => ({ auth: {} })) }));
+const url = 'https://example.supabase.co';
+const key = 'sb_publishable_example';
+test('environment URL and key are accepted', () => {
+  expect(validateSupabaseConfig(url, key)).toMatchObject({ configured: true, url, key });
+});
+test('trims whitespace and trailing slash', () => {
+  expect(validateSupabaseConfig(' ' + url + '/ ', ' ' + key + ' ')).toMatchObject({ configured: true, url, key });
+});
+test.each([[undefined, undefined], [url, ''], ['', key]])('missing environment is actionable', (u, k) => {
+  expect(validateSupabaseConfig(u, k)).toMatchObject({ configured: false });
+  expect(validateSupabaseConfig(u, k).error).toContain('.env');
+});
+test.each(['not-url', url + '/rest/v1', 'http://example.supabase.co'])('rejects wrong URL %s', u => {
+  expect(validateSupabaseConfig(u, key).configured).toBe(false);
+});
+test.each(['sb_secret_example', 'invalid', 'header.' + btoa(JSON.stringify({role:'service_role'})) + '.signature'])('rejects server or invalid key', k => {
+  expect(validateSupabaseConfig(url, k).configured).toBe(false);
+});
+test('accepts legacy anon', () => {
+  expect(validateSupabaseConfig(url, 'header.' + btoa(JSON.stringify({role:'anon'})) + '.signature').configured).toBe(true);
+});
+test('both import paths share one configured client and persist sessions', () => {
+  const previousUrl = process.env.REACT_APP_SUPABASE_URL;
+  const previousKey = process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+  process.env.REACT_APP_SUPABASE_URL = url;
+  process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY = key;
+  try {
+    jest.isolateModules(() => {
+      const { createClient } = require('@supabase/supabase-js');
+      createClient.mockClear();
+      const main = require('../supabase');
+      const compatibility = require('../services/supabase');
+      expect(main.supabase).toBe(compatibility.supabase);
+      expect(createClient).toHaveBeenCalledTimes(1);
+      const options = createClient.mock.calls[0][2];
+      expect(options.auth.persistSession).toBe(true);
+      expect(options.auth.autoRefreshToken).toBe(true);
+      sessionStorage.setItem('academy-remember', 'no');
+      options.auth.storage.setItem('test-token', 'session');
+      expect(sessionStorage.getItem('test-token')).toBe('session');
+      expect(localStorage.getItem('test-token')).toBeNull();
+      sessionStorage.setItem('academy-remember', 'yes');
+      options.auth.storage.setItem('test-token', 'persistent');
+      expect(localStorage.getItem('test-token')).toBe('persistent');
+      expect(sessionStorage.getItem('test-token')).toBeNull();
+      options.auth.storage.removeItem('test-token');
+      sessionStorage.removeItem('academy-remember');
+    });
+  } finally {
+    if (previousUrl === undefined) delete process.env.REACT_APP_SUPABASE_URL;
+    else process.env.REACT_APP_SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    else process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY = previousKey;
+  }
 });
 
 ```
@@ -1290,7 +1433,7 @@ export default function StudentForm({
 import { createContext, useContext, useRef, useState, useEffect } from 'react';
 import { read, write, migrate } from '../services/db';
 import { cloudEnabled, api } from '../services/cloud';
-import { supabase } from '../services/supabase';
+import { supabase, supabaseConfigError } from '../services/supabase';
 const Context = createContext(null);
 const empty = () => migrate({
   users: [],
@@ -1347,7 +1490,7 @@ export function AppProvider({
     }
     if (!supabase) {
       setLoading(false);
-      setNotice('Supabase .env sozlamalari kiritilmagan. README-SUPABASE.md faylini oching.');
+      setNotice(supabaseConfigError);
       return;
     }
     let alive = true;
@@ -1448,7 +1591,7 @@ export function AppProvider({
   }
   async function login(email, password, remember = true) {
     if (cloudEnabled) {
-      if (!supabase) throw Error('Supabase sozlamalarini kiriting.');
+      if (!supabase) throw Error(supabaseConfigError);
       sessionStorage.setItem('academy-remember', remember ? 'yes' : 'no');
       const {
         data,
@@ -4745,7 +4888,7 @@ export default function Support() {
 
 ## src/services/certificate.js
 
-```js
+```javascript
 import { jsPDF } from "jspdf";
 export async function downloadCertificate(cert) {
   await document.fonts.ready;
@@ -4794,11 +4937,11 @@ export async function downloadCertificate(cert) {
 
 ## src/services/cloud.js
 
-```js
-import { supabase } from './supabase';
+```javascript
+import { supabase, supabaseConfigError } from './supabase';
 export const cloudEnabled = process.env.REACT_APP_DATA_MODE !== 'demo';
 export async function api(action, payload = {}) {
-  if (!supabase) throw Error('Supabase URL va publishable key .env faylida kiritilmagan.');
+  if (!supabase) throw Error(supabaseConfigError);
   const {
     data,
     error
@@ -4854,7 +4997,7 @@ export async function cloudFile(path) {
 
 ## src/services/db.js
 
-```js
+```javascript
 import { cloudEnabled, uploadCloudFile, cloudFile } from './cloud';
 export const KEY = "ai-academy-v1";
 export const uid = () => crypto.randomUUID();
@@ -5287,44 +5430,19 @@ export function periodStatistics(d, days) {
 
 ## src/services/supabase.js
 
-```js
-import { createClient } from '@supabase/supabase-js';
-const url = process.env.REACT_APP_SUPABASE_URL;
-const key = process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
-// Respect the existing "remember me" choice without storing passwords.
-const storage = {
-  getItem(key) {
-    return localStorage.getItem(key) || sessionStorage.getItem(key);
-  },
-  setItem(key, value) {
-    const target = sessionStorage.getItem('academy-remember') === 'no' ? sessionStorage : localStorage;
-    const other = target === localStorage ? sessionStorage : localStorage;
-    other.removeItem(key);
-    target.setItem(key, value);
-  },
-  removeItem(key) {
-    localStorage.removeItem(key);
-    sessionStorage.removeItem(key);
-  }
-};
-export const supabase = url && key ? createClient(url, key, {
-  auth: {
-    storage,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
-}) : null;
+```javascript
+// Compatibility path: always reuse the single client in src/supabase.js.
+export { supabase, isSupabaseConfigured, supabaseConfigError } from '../supabase';
 
 ```
 
 ## src/services/supabaseAuth.js
 
-```js
+```javascript
 // Optional Auth helpers. AppContext uses the same Supabase client directly.
-import { supabase } from './supabase';
+import { supabase, supabaseConfigError } from './supabase';
 function client() {
-  if (!supabase) throw Error('Supabase sozlamalari kiritilmagan.');
+  if (!supabase) throw Error(supabaseConfigError);
   return supabase;
 }
 function checked(result) {
@@ -5359,7 +5477,7 @@ export function observeSession(callback) {
 
 ## src/setupTests.js
 
-```js
+```javascript
 process.env.REACT_APP_DATA_MODE = 'demo';
 import { TextEncoder, TextDecoder } from "util";
 import { randomUUID } from "crypto";
@@ -5372,6 +5490,74 @@ Object.defineProperty(global.crypto, "randomUUID", {
   configurable: true
 });
 global.IS_REACT_ACT_ENVIRONMENT = true;
+
+```
+
+## src/supabase.js
+
+```javascript
+import { createClient } from '@supabase/supabase-js';
+
+// All configuration comes from CRA environment variables. No keys in JS/JSON.
+export function validateSupabaseConfig(rawUrl, rawKey) {
+  const url = (rawUrl || '').trim().replace(/\/+$/, '');
+  const key = (rawKey || '').trim();
+  let error = '';
+  if (!url || !key) {
+    error = 'package.json yonidagi .env faylida REACT_APP_SUPABASE_URL va REACT_APP_SUPABASE_PUBLISHABLE_KEY ni to‘ldiring. Keyin npm start ni qayta ishga tushiring; Vercel’da Environment Variables kiritib Redeploy qiling.';
+  } else {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') throw Error();
+    } catch {
+      error = 'REACT_APP_SUPABASE_URL noto‘g‘ri. Project URL kiriting: https://LOYIHA_ID.supabase.co';
+    }
+    if (!error && !/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) {
+      try {
+        const parts = key.split('.');
+        if (parts.length !== 3) throw Error();
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload.role !== 'anon') throw Error();
+      } catch {
+        error = 'Frontend uchun Publishable key yoki legacy anon key kiriting. Secret/service_role kalitini ishlatmang.';
+      }
+    }
+  }
+  return { url, key, error, configured: !error };
+}
+
+const config = validateSupabaseConfig(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY
+);
+export const isSupabaseConfigured = config.configured;
+export const supabaseConfigError = config.error;
+
+// Preserve the existing remember-me behavior and refreshed sessions.
+const storage = {
+  getItem(key) {
+    return localStorage.getItem(key) || sessionStorage.getItem(key);
+  },
+  setItem(key, value) {
+    const target = sessionStorage.getItem('academy-remember') === 'no' ? sessionStorage : localStorage;
+    const other = target === localStorage ? sessionStorage : localStorage;
+    other.removeItem(key);
+    target.setItem(key, value);
+  },
+  removeItem(key) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
+};
+
+export const supabase = isSupabaseConfigured ? createClient(config.url, config.key, {
+  auth: {
+    storage,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+}) : null;
 
 ```
 
@@ -5393,6 +5579,22 @@ end $$;
 
 ```
 
+## supabase/README.md
+
+```text
+# Supabase backend v6
+
+Asosiy papkadagi `README-SUPABASE.md`ni o‘qing.
+
+1. `schema.sql` → Supabase SQL Editor.
+2. Authda admin → `BOOTSTRAP-ADMIN.sql`da emailni almashtirib bajarish.
+3. `npx supabase functions deploy academy --project-ref YOUR_PROJECT_REF --no-verify-jwt`.
+4. Asosiy `.env`ga URL/publishable key va DATA_MODE=supabase.
+
+`migrations/202610180001_academy.sql` va `schema.sql` bir xil. Eski v5.1 jadvallari o‘chirilmaydi, yangi backend academy_state/academy_audit jadvallaridan foydalanadi. Eski ma’lumotlar avtomatik import qilinmaydi.
+
+```
+
 ## supabase/config.toml
 
 ```toml
@@ -5405,7 +5607,7 @@ verify_jwt = false
 
 ## supabase/functions/_shared/domain.js
 
-```js
+```javascript
 export const KEY = "ai-academy-v1";
 export const uid = () => crypto.randomUUID();
 export const money = n => new Intl.NumberFormat("uz-UZ").format(n) + " so‘m";
@@ -5834,7 +6036,7 @@ export function periodStatistics(d, days) {
 
 ## supabase/functions/_shared/logic.js
 
-```js
+```javascript
 import * as D from './domain.js';
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const assert = (condition, message = 'Ruxsat berilmagan.') => {
@@ -6095,9 +6297,16 @@ export function mayReadFile(d, u, path) {
 
 ```
 
+## supabase/functions/_shared/package.json
+
+```json
+{"type":"module"}
+
+```
+
 ## supabase/functions/academy/index.ts
 
-```ts
+```typescript
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { view, applyUpdate, mayReadFile } from '../_shared/logic.js';
 import * as D from '../_shared/domain.js';
@@ -6384,5 +6593,33 @@ on conflict(id) do nothing;
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
 values('academy-student-media','academy-student-media',false,20971520,array['application/pdf','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','image/jpeg','image/png','image/webp']) on conflict(id) do nothing;
+
+```
+
+## scripts/check-supabase.cjs
+
+```javascript
+const path = require('node:path');
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+require('react-scripts/config/env');
+const url = (process.env.REACT_APP_SUPABASE_URL || '').trim();
+const key = (process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || '').trim();
+console.log('Loyiha papkasi:', path.resolve(__dirname, '..'));
+console.log('URL mavjud:', Boolean(url));
+console.log('Publishable/anon key mavjud:', Boolean(key));
+if (!url || !key) {
+  console.error('package.json yonidagi .env faylini to‘ldiring. .env.txt bo‘lmasin.');
+  process.exitCode = 1;
+} else {
+  try {
+    const target = new URL(url);
+    if (target.protocol !== 'https:' || target.pathname !== '/' || target.search || target.hash || target.username || target.password) throw Error();
+    console.log('Ulanadigan loyiha:', target.hostname);
+    console.log('Sozlamalar yuklandi. Bu tekshiruv Auth/Edge/SQLga haqiqiy so‘rov yubormaydi.');
+  } catch {
+    console.error('Project URL noto‘g‘ri.');
+    process.exitCode = 1;
+  }
+}
 
 ```

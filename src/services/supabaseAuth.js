@@ -1,7 +1,7 @@
 // Optional Auth helpers. AppContext uses the same Supabase client directly.
-import { supabase } from './supabase';
+import { supabase, supabaseConfigError } from './supabase';
 function client() {
-  if (!supabase) throw Error('Supabase sozlamalari kiritilmagan.');
+  if (!supabase) throw Error(supabaseConfigError);
   return supabase;
 }
 function checked(result) {
