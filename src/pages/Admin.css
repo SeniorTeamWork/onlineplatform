@@ -1,1 +1,55 @@
 /* Umumiy UI stillari src/index.css ichida, ranglar va shriftlar :root orqali boshqariladi. */
+/* Asosiy UI stillari src/index.css ichida. */
+
+.admin-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-filter select {
+  max-width: 100%;
+}
+
+.stats .stat {
+  min-width: 0;
+}
+
+.stats .stat .badge {
+  white-space: normal;
+}
+
+.back{
+  display: none !important;
+}
+
+/*  !! */
+
+.overview-filters {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  );
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.five-student-scroll {
+  overflow: auto;
+}
+
+.five-student-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+@media (max-width: 700px) {
+  .overview-filters {
+    grid-template-columns: 1fr;
+  }
+}

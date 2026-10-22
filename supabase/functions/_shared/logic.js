@@ -1,257 +1,672 @@
-import * as D from './domain.js';
-const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const assert = (condition, message = 'Ruxsat berilmagan.') => {
-  if (!condition) throw Error(message);
+import * as D from "./domain.js";
+
+const equal = (a, b) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+const assert = (
+  condition,
+  message = "Ruxsat berilmagan."
+) => {
+  if (!condition) {
+    throw new Error(message);
+  }
 };
+
 export function view(d, user) {
   const out = structuredClone(d);
-  out.users.forEach(u => delete u.password);
-  if (user.role === 'admin') return out;
-  const id = user.id,
-    ids = new Set(D.enrollmentsFor(d, id).map(e => e.courseId));
-  out.users = out.users.filter(u => u.id === id);
-  out.users.forEach(u => delete u.notes);
-  out.enrollments = out.enrollments.filter(e => e.userId === id);
-  out.courses = out.courses.filter(c => ids.has(c.id));
-  out.lessons = out.lessons.filter(l => ids.has(l.courseId) && l.published && !l.archived).map(l => {
-    const open = D.unlocked(d, id, l.id);
-    return {
-      ...l,
-      video: open ? l.video : '',
-      fileId: open ? l.fileId : '',
-      task: open ? l.task : '',
-      materials: open ? l.materials : [],
-      questions: open ? l.questions.map(({
-        correct,
-        ...q
-      }) => q) : []
-    };
+
+  out.users.forEach((account) => {
+    delete account.password;
   });
-  for (const key of ['payments', 'attempts', 'submissions', 'certificates', 'tickets']) out[key] = out[key].filter(x => x.userId === id);
-  out.attempts.forEach(a => a.questions?.forEach(q => delete q.correct));
+
+  if (user.role === "admin") {
+    return out;
+  }
+
+  const id = user.id;
+
+  const courseIds = new Set(
+    D.enrollmentsFor(d, id).map(
+      (enrollment) => enrollment.courseId
+    )
+  );
+
+  out.users = out.users.filter(
+    (account) => account.id === id
+  );
+
+  out.users.forEach((account) => {
+    delete account.notes;
+    delete account.adminNote;
+    delete account.trialSeenIds;
+  });
+
+  out.enrollments = out.enrollments.filter(
+    (enrollment) => enrollment.userId === id
+  );
+
+  out.courses = out.courses.filter(
+    (course) => courseIds.has(course.id)
+  );
+
+  out.lessons = out.lessons
+    .filter(
+      (lesson) =>
+        courseIds.has(lesson.courseId) &&
+        lesson.published &&
+        !lesson.archived
+    )
+    .map((lesson) => {
+      const open = D.unlocked(d, id, lesson.id);
+
+      return {
+        ...lesson,
+        video: open ? lesson.video : "",
+        fileId: open ? lesson.fileId : "",
+        task: open ? lesson.task : "",
+        materials: open ? lesson.materials : [],
+        questions: open
+          ? lesson.questions.map(({ correct, ...question }) => question)
+          : [],
+      };
+    });
+
+  for (const key of [
+    "payments",
+    "attempts",
+    "submissions",
+    "certificates",
+    "tickets",
+  ]) {
+    out[key] = out[key].filter(
+      (item) => item.userId === id
+    );
+  }
+
+  out.attempts.forEach((attempt) => {
+    attempt.questions?.forEach((question) => {
+      delete question.correct;
+    });
+  });
+
   out.progress = {
-    [id]: out.progress[id] || {}
+    [id]: out.progress[id] || {},
   };
-  out.testSessions = Object.fromEntries(Object.entries(out.testSessions).filter(([, s]) => s.userId === id));
-  Object.values(out.testSessions).forEach(s => s.questions.forEach(q => delete q.correct));
+
+  out.testSessions = Object.fromEntries(
+    Object.entries(out.testSessions).filter(
+      ([, session]) => session.userId === id
+    )
+  );
+
+  Object.values(out.testSessions).forEach((session) => {
+    session.questions.forEach((question) => {
+      delete question.correct;
+    });
+  });
+
   out.expenses = [];
+
   return out;
 }
+
 function additions(old, items) {
   assert(Array.isArray(items));
-  assert(old.every(x => items.some(y => y.id === x.id)), 'Tarixni o‘chirib bo‘lmaydi.');
-  assert(new Set(items.map(x => x.id)).size === items.length, 'Takroriy ID');
-  return items.filter(x => !old.some(y => y.id === x.id));
+
+  assert(
+    old.every((item) =>
+      items.some((next) => next.id === item.id)
+    ),
+    "Tarixni o‘chirib bo‘lmaydi."
+  );
+
+  assert(
+    new Set(items.map((item) => item.id)).size === items.length,
+    "Takroriy ID"
+  );
+
+  return items.filter(
+    (item) => !old.some((previous) => previous.id === item.id)
+  );
 }
+
 function stable(old, items) {
-  for (const x of old) assert(equal(x, items.find(y => y.id === x.id)), 'Saqlangan tarix o‘zgartirilmaydi.');
+  for (const item of old) {
+    assert(
+      equal(
+        item,
+        items.find((next) => next.id === item.id)
+      ),
+      "Saqlangan tarix o‘zgartirilmaydi."
+    );
+  }
 }
+
 export function applyUpdate(d, user, next) {
-  const base = view(d, user),
-    changed = Object.keys(base).filter(k => !equal(base[k], next[k]));
-  const allowed = user.role === 'admin' ? ['courses', 'lessons', 'enrollments', 'payments', 'submissions', 'tickets', 'testSessions', 'expenses'] : ['testSessions', 'attempts', 'progress', 'submissions', 'tickets', 'certificates'];
-  assert(changed.every(k => allowed.includes(k)), 'Bu ma’lumotni o‘zgartirish mumkin emas.');
+  const base = view(d, user);
+
+  const changed = Object.keys(base).filter(
+    (key) => !equal(base[key], next[key])
+  );
+
+  const allowed =
+    user.role === "admin"
+      ? [
+          "courses",
+          "lessons",
+          "enrollments",
+          "payments",
+          "submissions",
+          "tickets",
+          "testSessions",
+          "expenses",
+        ]
+      : [
+          "testSessions",
+          "attempts",
+          "progress",
+          "submissions",
+          "tickets",
+          "certificates",
+        ];
+
+  assert(
+    changed.every((key) => allowed.includes(key)),
+    "Bu ma’lumotni o‘zgartirish mumkin emas."
+  );
+
   const id = user.id;
-  if (user.role === 'admin') {
-    if (changed.includes('courses')) {
+
+  if (user.role === "admin") {
+    if (changed.includes("courses")) {
       additions(d.courses, next.courses);
-      for (const c of next.courses) {
-        assert(c.title?.trim().length >= 2);
-        D.integer(c.price);
+
+      for (const course of next.courses) {
+        assert(course.title?.trim().length >= 2);
+        D.integer(course.price);
       }
+
       d.courses = next.courses;
     }
-    if (changed.includes('lessons')) {
+
+    if (changed.includes("lessons")) {
       additions(d.lessons, next.lessons);
-      for (const l of next.lessons) {
-        assert(d.courses.some(c => c.id === l.courseId));
-        const old = d.lessons.find(x => x.id === l.id);
-        assert(!old || old.courseId === l.courseId);
-        assert(l.title?.trim() && Array.isArray(l.questions));
-        assert(!l.video || l.video.startsWith('https://'));
-        for (const q of l.questions) assert(q.text?.trim() && q.options?.length >= 2 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length);
-        assert(!l.published || l.questions.length > 0);
+
+      for (const lesson of next.lessons) {
+        assert(
+          d.courses.some(
+            (course) => course.id === lesson.courseId
+          )
+        );
+
+        const old = d.lessons.find(
+          (item) => item.id === lesson.id
+        );
+
+        assert(!old || old.courseId === lesson.courseId);
+
+        assert(
+          lesson.title?.trim() &&
+            Array.isArray(lesson.questions)
+        );
+
+        assert(
+          !lesson.video ||
+            lesson.video.startsWith("https://")
+        );
+
+        for (const question of lesson.questions) {
+          assert(
+            question.text?.trim() &&
+              question.options?.length >= 2 &&
+              Number.isInteger(question.correct) &&
+              question.correct >= 0 &&
+              question.correct < question.options.length
+          );
+        }
+
+        assert(
+          !lesson.published || lesson.questions.length > 0
+        );
       }
+
       d.lessons = next.lessons;
     }
-    if (changed.includes('enrollments')) {
-      assert(d.enrollments.length === next.enrollments.length);
-      for (const e of next.enrollments) {
-        const old = d.enrollments.find(x => x.id === e.id);
-        assert(old && equal({
-          ...old,
-          fee: e.fee
-        }, e));
-        assert(D.integer(e.fee) >= D.enrollmentSummary(d, old).paid);
-        old.fee = e.fee;
+
+    if (changed.includes("enrollments")) {
+      assert(
+        d.enrollments.length === next.enrollments.length
+      );
+
+      for (const enrollment of next.enrollments) {
+        const old = d.enrollments.find(
+          (item) => item.id === enrollment.id
+        );
+
+        assert(
+          old &&
+            equal(
+              {
+                ...old,
+                fee: enrollment.fee,
+              },
+              enrollment
+            )
+        );
+
+        assert(
+          D.integer(enrollment.fee) >=
+            D.enrollmentSummary(d, old).paid
+        );
+
+        old.fee = enrollment.fee;
       }
     }
-    if (changed.includes('payments')) {
+
+    if (changed.includes("payments")) {
       const added = additions(d.payments, next.payments);
-      for (const p of d.payments) {
-        const n = next.payments.find(x => x.id === p.id);
-        if (!equal(p, n)) {
-          assert(!p.voidedAt && n.voidedAt && n.voidReason?.trim().length >= 5);
-          assert(equal({
-            ...p,
-            voidedAt: n.voidedAt,
-            voidReason: n.voidReason,
-            voidedBy: n.voidedBy
-          }, n));
-          Object.assign(p, {
+
+      for (const payment of d.payments) {
+        const updated = next.payments.find(
+          (item) => item.id === payment.id
+        );
+
+        if (!equal(payment, updated)) {
+          assert(
+            !payment.voidedAt &&
+              updated.voidedAt &&
+              updated.voidReason?.trim().length >= 5
+          );
+
+          assert(
+            equal(
+              {
+                ...payment,
+                voidedAt: updated.voidedAt,
+                voidReason: updated.voidReason,
+                voidedBy: updated.voidedBy,
+              },
+              updated
+            )
+          );
+
+          Object.assign(payment, {
             voidedAt: new Date().toISOString(),
-            voidReason: n.voidReason,
-            voidedBy: id
+            voidReason: updated.voidReason,
+            voidedBy: id,
           });
         }
       }
-      for (const p of added) {
-        assert(!p.voidedAt);
+
+      for (const payment of added) {
+        assert(!payment.voidedAt);
+
         D.addPayment(d, {
-          ...p,
-          createdBy: id
-        });
-      }
-    }
-    if (changed.includes('submissions')) {
-      assert(d.submissions.length === next.submissions.length);
-      for (const s of d.submissions) {
-        const n = next.submissions.find(x => x.id === s.id);
-        if (!equal(s, n)) D.reviewPractice(d, s.id, n.status, n.grade, n.feedback, id);
-      }
-    }
-    if (changed.includes('tickets')) {
-      assert(d.tickets.length === next.tickets.length);
-      for (const t of d.tickets) {
-        const n = next.tickets.find(x => x.id === t.id);
-        assert(n && equal({
-          ...t,
-          reply: n.reply
-        }, n));
-        t.reply = String(n.reply).slice(0, 10000);
-      }
-    }
-    if (changed.includes('testSessions')) for (const [key, s] of Object.entries(d.testSessions)) {
-      if (!next.testSessions[key]) {
-        const l = d.lessons.find(l => l.id === s.lessonId);
-        assert(!l?.published || l?.archived);
-        delete d.testSessions[key];
-      } else assert(equal(s, next.testSessions[key]));
-    }
-    if (changed.includes('expenses')) {
-      const added = additions(d.expenses || [], next.expenses);
-      stable(d.expenses || [], next.expenses);
-      for (const e of added) {
-        D.integer(e.amount, 1);
-        assert(e.title?.trim() && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && e.date <= D.localDate() && new Date(e.date + 'T00:00:00Z').toISOString().slice(0, 10) === e.date);
-        d.expenses.push({
-          ...e,
+          ...payment,
           createdBy: id,
-          createdAt: new Date().toISOString()
         });
       }
     }
+
+    if (changed.includes("submissions")) {
+      assert(
+        d.submissions.length === next.submissions.length
+      );
+
+      for (const submission of d.submissions) {
+        const updated = next.submissions.find(
+          (item) => item.id === submission.id
+        );
+
+        if (!equal(submission, updated)) {
+          D.reviewPractice(
+            d,
+            submission.id,
+            updated.status,
+            updated.grade,
+            updated.feedback,
+            id
+          );
+        }
+      }
+    }
+
+    if (changed.includes("tickets")) {
+      assert(d.tickets.length === next.tickets.length);
+
+      for (const ticket of d.tickets) {
+        const updated = next.tickets.find(
+          (item) => item.id === ticket.id
+        );
+
+        assert(
+          updated &&
+            equal(
+              {
+                ...ticket,
+                reply: updated.reply,
+              },
+              updated
+            )
+        );
+
+        ticket.reply = String(updated.reply).slice(0, 10000);
+      }
+    }
+
+    if (changed.includes("testSessions")) {
+      for (const [key, session] of Object.entries(
+        d.testSessions
+      )) {
+        if (!next.testSessions[key]) {
+          const lesson = d.lessons.find(
+            (item) => item.id === session.lessonId
+          );
+
+          assert(!lesson?.published || lesson?.archived);
+
+          delete d.testSessions[key];
+        } else {
+          assert(equal(session, next.testSessions[key]));
+        }
+      }
+    }
+
+    if (changed.includes("expenses")) {
+      const added = additions(
+        d.expenses || [],
+        next.expenses
+      );
+
+      stable(d.expenses || [], next.expenses);
+
+      for (const expense of added) {
+        D.integer(expense.amount, 1);
+
+        assert(
+          expense.title?.trim() &&
+            /^\d{4}-\d{2}-\d{2}$/.test(expense.date) &&
+            expense.date <= D.localDate() &&
+            new Date(expense.date + "T00:00:00Z")
+              .toISOString()
+              .slice(0, 10) === expense.date
+        );
+
+        d.expenses.push({
+          ...expense,
+          createdBy: id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
     return d;
   }
-  if (changed.includes('progress')) {
-    assert(Object.keys(next.progress).every(k => k === id));
-    const old = d.progress[id] || {},
-      n = next.progress[id] || {};
-    for (const [lid, p] of Object.entries(old)) assert(equal(p, n[lid]) || n[lid]?.watched);
-    for (const [lid, p] of Object.entries(n)) if (!equal(p, old[lid])) {
-      assert(D.unlocked(d, id, lid));
-      assert(p.watched === true);
-      d.progress[id] ??= {};
-      d.progress[id][lid] = {
-        watched: true,
-        watchedAt: new Date().toISOString()
-      };
+
+  if (changed.includes("progress")) {
+    assert(
+      Object.keys(next.progress).every((key) => key === id)
+    );
+
+    const old = d.progress[id] || {};
+    const updated = next.progress[id] || {};
+
+    for (const [lessonId, progress] of Object.entries(old)) {
+      assert(
+        equal(progress, updated[lessonId]) ||
+          updated[lessonId]?.watched
+      );
     }
-  }
-  if (changed.includes('attempts')) {
-    const added = additions(base.attempts, next.attempts);
-    stable(base.attempts, next.attempts);
-    for (const a of added) {
-      assert(a.userId === id);
-      const s = d.testSessions[id + ':' + a.lessonId];
-      assert(s && s.id === a.id);
-      D.recordAttempt(d, s, a.answers);
-    }
-  }
-  if (changed.includes('testSessions')) {
-    for (const [key, n] of Object.entries(next.testSessions)) {
-      assert(n.userId === id && key === id + ':' + n.lessonId && D.unlocked(d, id, n.lessonId));
-      const existing = d.testSessions[key];
-      if (existing) {
-        assert(existing.id === n.id);
-        for (const [qid, value] of Object.entries(n.answers)) {
-          const q = existing.questions.find(q => q.id === qid);
-          assert(q && Number.isInteger(value) && value >= 0 && value < q.options.length);
-        }
-        existing.answers = n.answers;
-      } else {
-        assert(!d.attempts.some(a => a.id === n.id));
-        const l = d.lessons.find(l => l.id === n.lessonId);
-        assert(l.questions.length);
-        d.testSessions[key] = {
-          id: n.id,
-          userId: id,
-          lessonId: l.id,
-          courseId: l.courseId,
-          lessonTitle: l.title,
-          startedAt: new Date().toISOString(),
-          questions: structuredClone(l.questions),
-          answers: {}
+
+    for (const [lessonId, progress] of Object.entries(updated)) {
+      if (!equal(progress, old[lessonId])) {
+        assert(D.unlocked(d, id, lessonId));
+        assert(progress.watched === true);
+
+        d.progress[id] ??= {};
+
+        d.progress[id][lessonId] = {
+          watched: true,
+          watchedAt: new Date().toISOString(),
         };
       }
     }
-    for (const [key, s] of Object.entries(base.testSessions)) if (!next.testSessions[key]) assert(d.attempts.some(a => a.id === s.id), 'Testni faqat topshirish orqali tugating.');
   }
-  if (changed.includes('submissions')) {
-    const added = additions(base.submissions, next.submissions);
+
+  if (changed.includes("attempts")) {
+    const added = additions(base.attempts, next.attempts);
+
+    stable(base.attempts, next.attempts);
+
+    for (const attempt of added) {
+      assert(attempt.userId === id);
+
+      const session =
+        d.testSessions[id + ":" + attempt.lessonId];
+
+      assert(session && session.id === attempt.id);
+
+      D.recordAttempt(d, session, attempt.answers);
+    }
+  }
+
+  if (changed.includes("testSessions")) {
+    for (const [key, updated] of Object.entries(
+      next.testSessions
+    )) {
+      assert(
+        updated.userId === id &&
+          key === id + ":" + updated.lessonId &&
+          D.unlocked(d, id, updated.lessonId)
+      );
+
+      const existing = d.testSessions[key];
+
+      if (existing) {
+        assert(existing.id === updated.id);
+
+        for (const [questionId, value] of Object.entries(
+          updated.answers
+        )) {
+          const question = existing.questions.find(
+            (item) => item.id === questionId
+          );
+
+          assert(
+            question &&
+              Number.isInteger(value) &&
+              value >= 0 &&
+              value < question.options.length
+          );
+        }
+
+        existing.answers = updated.answers;
+      } else {
+        assert(
+          !d.attempts.some(
+            (attempt) => attempt.id === updated.id
+          )
+        );
+
+        const lesson = d.lessons.find(
+          (item) => item.id === updated.lessonId
+        );
+
+        assert(lesson.questions.length);
+
+        d.testSessions[key] = {
+          id: updated.id,
+          userId: id,
+          lessonId: lesson.id,
+          courseId: lesson.courseId,
+          lessonTitle: lesson.title,
+          startedAt: new Date().toISOString(),
+          questions: structuredClone(lesson.questions),
+          answers: {},
+        };
+      }
+    }
+
+    for (const [key, session] of Object.entries(
+      base.testSessions
+    )) {
+      if (!next.testSessions[key]) {
+        assert(
+          d.attempts.some(
+            (attempt) => attempt.id === session.id
+          ),
+          "Testni faqat topshirish orqali tugating."
+        );
+      }
+    }
+  }
+
+  if (changed.includes("submissions")) {
+    const added = additions(
+      base.submissions,
+      next.submissions
+    );
+
     stable(base.submissions, next.submissions);
-    for (const s of added) {
-      assert(s.userId === id);
-      const l = d.lessons.find(l => l.id === s.lessonId);
+
+    for (const submission of added) {
+      assert(submission.userId === id);
+
+      const lesson = d.lessons.find(
+        (item) => item.id === submission.lessonId
+      );
+
       D.submitPractice(d, {
-        id: s.id,
+        id: submission.id,
         userId: id,
-        lessonId: l.id,
-        courseId: l.courseId,
-        lessonTitle: l.title,
-        answer: s.answer,
-        attachment: s.attachment
+        lessonId: lesson.id,
+        courseId: lesson.courseId,
+        lessonTitle: lesson.title,
+        answer: submission.answer,
+        attachment: submission.attachment,
       });
     }
   }
-  if (changed.includes('tickets')) {
+
+  if (changed.includes("tickets")) {
     const added = additions(base.tickets, next.tickets);
+
     stable(base.tickets, next.tickets);
-    for (const t of added) {
-      assert(t.userId === id && t.message?.trim());
+
+    for (const ticket of added) {
+      assert(ticket.userId === id && ticket.message?.trim());
+
       d.tickets.unshift({
-        id: t.id,
+        id: ticket.id,
         userId: id,
-        subject: String(t.subject).slice(0, 200),
-        message: String(t.message).slice(0, 10000),
-        reply: '',
-        createdAt: new Date().toISOString()
+        subject: String(ticket.subject).slice(0, 200),
+        message: String(ticket.message).slice(0, 10000),
+        reply: "",
+        createdAt: new Date().toISOString(),
       });
     }
   }
-  if (changed.includes('certificates')) {
-    const added = additions(base.certificates, next.certificates);
+
+  if (changed.includes("certificates")) {
+    const added = additions(
+      base.certificates,
+      next.certificates
+    );
+
     stable(base.certificates, next.certificates);
-    for (const c of added) {
-      assert(c.userId === id);
-      D.issueCertificate(d, id, c.courseId);
+
+    for (const certificate of added) {
+      assert(certificate.userId === id);
+
+      D.issueCertificate(d, id, certificate.courseId);
     }
   }
+
   return d;
 }
-export function mayReadFile(d, u, path) {
-  if (u.role === 'admin') return true;
-  if (u.avatarId === path) return true;
-  if (d.submissions.some(s => s.userId === u.id && s.attachment?.fileId === path)) return true;
-  return d.lessons.some(l => (l.fileId === path || l.materials?.some(m => m.fileId === path)) && D.unlocked(d, u.id, l.id));
+
+export function mayReadFile(d, user, path) {
+  if (user.role === "admin") {
+    return true;
+  }
+
+  if (user.avatarId === path) {
+    return true;
+  }
+
+  if (
+    d.submissions.some(
+      (submission) =>
+        submission.userId === user.id &&
+        submission.attachment?.fileId === path
+    )
+  ) {
+    return true;
+  }
+
+  return d.lessons.some(
+    (lesson) =>
+      (lesson.fileId === path ||
+        lesson.materials?.some(
+          (material) => material.fileId === path
+        )) &&
+      D.unlocked(d, user.id, lesson.id)
+  );
+}
+
+export function applyAdminAction(
+  state,
+  actor,
+  action,
+  body
+) {
+  assert(
+    actor.role === "admin" && actor.active,
+    "Faqat faol admin uchun."
+  );
+
+  if (action === "adminNote") {
+    assert(
+      typeof body.note === "string" &&
+        body.note.length <= 5000,
+      "Izoh 5000 belgidan oshmasin."
+    );
+
+    const target = state.users.find(
+      (user) =>
+        user.id === body.userId &&
+        user.role === "student"
+    );
+
+    assert(target, "Talaba topilmadi.");
+
+    target.adminNote = body.note.trim();
+  } else if (action === "markTrialsSeen") {
+    assert(
+      Array.isArray(body.enrollmentIds),
+      "Ro‘yxat noto‘g‘ri."
+    );
+
+    const valid = new Set(
+      state.enrollments.map(
+        (enrollment) => enrollment.id
+      )
+    );
+
+    assert(
+      body.enrollmentIds.every(
+        (id) => typeof id === "string" && valid.has(id)
+      ),
+      "Kurs biriktirilishi topilmadi."
+    );
+
+    actor.trialSeenIds = [
+      ...new Set([
+        ...(actor.trialSeenIds || []),
+        ...body.enrollmentIds,
+      ]),
+    ].filter((id) => valid.has(id));
+  } else {
+    throw new Error("Noma’lum admin amali.");
+  }
 }

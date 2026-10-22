@@ -1,0 +1,57 @@
+.payment-student-search {
+  position: relative;
+  min-width: 0;
+}
+
+.payment-student-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin-top: 6px;
+  padding: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--primary-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.payment-student-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-base);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.payment-student-option:hover,
+.payment-student-option.is-active,
+.payment-student-option[aria-selected="true"] {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.payment-student-option small {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.payment-search-empty {
+  padding: 14px 12px;
+  color: var(--muted);
+  font-size: var(--fs-base);
+}

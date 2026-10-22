@@ -1,105 +1,264 @@
-import Avatar from "../components/Avatar";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+
 import { useApp } from "../context/AppContext";
-import { enrollmentsFor, enrollmentSummary, paymentSummary, studentLessons, attemptPassed, money, integer, downloadMaterial } from "../services/db";
+
+import {
+  enrollmentsFor,
+  enrollmentSummary,
+  paymentSummary,
+  studentLessons,
+  attemptPassed,
+  money,
+  integer,
+  downloadMaterial,
+} from "../services/db";
+
+import { downloadCertificate } from "../services/certificate";
+
+import AdminStudentNote from "../components/AdminStudentNote";
+import Avatar from "../components/Avatar";
 import StudentForm from "../components/StudentForm";
 import PaymentForm from "../components/PaymentForm";
 import Modal from "../components/Modal";
-import { downloadCertificate } from "../services/certificate";
+
 import "./StudentDetail.css";
+
 export default function StudentDetail() {
-  const {
-    studentId
-  } = useParams();
+  const { studentId } = useParams();
+
   const {
     data,
     user,
     update,
     notify,
     cloud,
-    command
+    command,
   } = useApp();
+
   const [showPassword, setShowPassword] = useState(false);
-  const [edit, setEdit] = useState(false),
-    [voiding, setVoiding] = useState(null),
-    [feeEdit, setFeeEdit] = useState(null);
-  const student = data.users.find(u => u.id === studentId && u.role === "student");
-  if (!student) return <div className="empty">
-        Talaba topilmadi. <Link to="/admin/students">Ortga</Link>
-      </div>;
-  const totals = paymentSummary(data, student),
-    enrollments = enrollmentsFor(data, studentId),
-    lessons = studentLessons(data, studentId),
-    attempts = data.attempts.filter(a => a.userId === studentId),
-    submissions = data.submissions.filter(s => s.userId === studentId),
-    payments = data.payments.filter(p => p.userId === studentId);
-  async function voidPayment(e) {
-    e.preventDefault();
-    const reason = new FormData(e.currentTarget).get("reason").trim();
-    if (reason.length < 5) return notify("Kamida 5 belgili sabab yozing.");
-    if (await update(d => {
-      const p = d.payments.find(p => p.id === voiding.id);
-      if (p.voidedAt) throw Error("Avval bekor qilingan.");
-      p.voidedAt = new Date().toISOString();
-      p.voidReason = reason;
-      p.voidedBy = user.id;
-    })) setVoiding(null);
+  const [edit, setEdit] = useState(false);
+  const [voiding, setVoiding] = useState(null);
+  const [feeEdit, setFeeEdit] = useState(null);
+
+  const student = data.users.find(
+    (account) =>
+      account.id === studentId &&
+      account.role === "student"
+  );
+
+  if (!student) {
+    return (
+      <div className="empty">
+        Talaba topilmadi.{" "}
+        <Link to="/admin/students">Ortga</Link>
+      </div>
+    );
   }
-  async function fee(e) {
-    e.preventDefault();
-    const n = new FormData(e.currentTarget).get("fee");
-    if (await update(d => {
-      const enrollment = d.enrollments.find(e => e.id === feeEdit.id);
-      const value = integer(n);
-      if (value < enrollmentSummary(d, enrollment).paid) throw Error("Narx to‘langan summadan kam bo‘lolmaydi.");
-      enrollment.fee = value;
-    })) setFeeEdit(null);
-  }
-  async function download(m) {
-    try {
-      await downloadMaterial(m);
-    } catch (e) {
-      notify(e.message);
+
+  const totals = paymentSummary(data, student);
+  const enrollments = enrollmentsFor(data, studentId);
+  const lessons = studentLessons(data, studentId);
+
+  const attempts = data.attempts.filter(
+    (attempt) => attempt.userId === studentId
+  );
+
+  const submissions = data.submissions.filter(
+    (submission) => submission.userId === studentId
+  );
+
+  const payments = data.payments.filter(
+    (payment) => payment.userId === studentId
+  );
+
+  async function voidPayment(event) {
+    event.preventDefault();
+
+    const reason = new FormData(event.currentTarget)
+      .get("reason")
+      .trim();
+
+    if (reason.length < 5) {
+      return notify("Kamida 5 belgili sabab yozing.");
+    }
+
+    const success = await update((next) => {
+      const payment = next.payments.find(
+        (item) => item.id === voiding.id
+      );
+
+      if (payment.voidedAt) {
+        throw new Error("Avval bekor qilingan.");
+      }
+
+      payment.voidedAt = new Date().toISOString();
+      payment.voidReason = reason;
+      payment.voidedBy = user.id;
+    });
+
+    if (success) {
+      setVoiding(null);
     }
   }
-  return <>
+
+  async function fee(event) {
+    event.preventDefault();
+
+    const input = new FormData(event.currentTarget).get("fee");
+
+    const success = await update((next) => {
+      const enrollment = next.enrollments.find(
+        (item) => item.id === feeEdit.id
+      );
+
+      const value = integer(input);
+
+      if (value < enrollmentSummary(next, enrollment).paid) {
+        throw new Error(
+          "Narx to‘langan summadan kam bo‘lolmaydi."
+        );
+      }
+
+      enrollment.fee = value;
+    });
+
+    if (success) {
+      setFeeEdit(null);
+    }
+  }
+
+  async function download(material) {
+    try {
+      await downloadMaterial(material);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  async function changePassword() {
+    const password = window.prompt(
+      "Yangi parol (kamida 8 belgi):"
+    );
+
+    if (!password) return;
+
+    try {
+      await command("setPassword", {
+        userId: student.id,
+        password,
+      });
+
+      notify("Yangi parol saqlandi.");
+    } catch {
+      // Xatolik AppContext orqali ko‘rsatiladi.
+    }
+  }
+
+  return (
+    <>
       <Link className="back" to="/admin/students">
         ← Talabalar
       </Link>
+
       <div className="page-heading">
         <div>
-          <Avatar user={student} /><h1>{student.name}</h1>
+          <Avatar user={student} />
+
+          <h1>{student.name}</h1>
+
           <p>
-            {student.email} · {student.phone || "Telefon kiritilmagan"}
+            {student.username || "Login belgilanmagan"} ·{" "}
+            {student.phone || "Telefon kiritilmagan"}
           </p>
+
           <p>
-            {!student.active ? "Nofaol" : student.accessMode === "deposit" ? "Depozit" : "Faol"} · {student.notes}
+            {!student.active
+              ? "Nofaol"
+              : student.accessMode === "deposit"
+                ? "Depozit"
+                : "Faol"}{" "}
+            · {student.notes}
           </p>
         </div>
-        <button className="primary" onClick={() => setEdit(true)}>
+
+        <button
+          type="button"
+          className="primary"
+          onClick={() => setEdit(true)}
+        >
           Ma’lumot va kurslarni tahrirlash
         </button>
       </div>
-      <section className="panel detail-panel"><h2>Hisob ma’lumotlari</h2><p>Login: <strong>{student.email}</strong></p><p>Telefon: {student.phone || 'Kiritilmagan'}</p><p hidden={cloud}>Demo paroli: <strong>{showPassword ? student.password : '••••••••'}</strong> <button className="secondary" onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Yashirish' : 'Ko‘rsatish'}</button></p>{cloud && <button className="secondary" onClick={async () => {
-        const password = window.prompt('Yangi parol (kamida 8 belgi):');
-        if (!password) return;
-        try {
-          await command('setPassword', {
-            userId: student.id,
-            password
-          });
-          notify('Yangi parol saqlandi.');
-        } catch {}
-      }}>Yangi parol belgilash</button>}<p className="muted">Faqat demo rejimi. Supabase Auth parollarni admin uchun ochib bermaydi; u yerda parolni tiklash ishlatiladi.</p></section>
+
+      <section className="panel detail-panel">
+        <h2>Hisob ma’lumotlari</h2>
+
+        <p>
+          Login: <strong>{student.username || "Login belgilanmagan"}</strong>
+        </p>
+
+        <p>Telefon: {student.phone || "Kiritilmagan"}</p>
+
+        <p hidden={cloud}>
+          Demo paroli:{" "}
+          <strong>
+            {showPassword ? student.password : "••••••••"}
+          </strong>{" "}
+
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Yashirish" : "Ko‘rsatish"}
+          </button>
+        </p>
+
+        {cloud && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={changePassword}
+          >
+            Yangi parol belgilash
+          </button>
+        )}
+
+        <p className="muted">
+          Supabase Auth mavjud parolni ko‘rsatmaydi.
+          Admin yangi parol belgilashi mumkin.
+        </p>
+      </section>
+
+      <AdminStudentNote
+        key={student.id}
+        student={student}
+      />
+
       <div className="stats">
-        {[[enrollments.length, "Sotib olingan kurs"], [lessons.filter(l => data.progress[studentId]?.[l.id]?.watched).length, "Ko‘rilgan video"], [money(totals.paid), "To‘langan"], [money(totals.debt), "Qarz"]].map(([n, l]) => <div className="panel stat" key={l}>
-            <strong>{n}</strong>
-            <span>{l}</span>
-          </div>)}
+        {[
+          [enrollments.length, "Sotib olingan kurs"],
+          [
+            lessons.filter(
+              (lesson) =>
+                data.progress[studentId]?.[lesson.id]?.watched
+            ).length,
+            "Ko‘rilgan video",
+          ],
+          [money(totals.paid), "To‘langan"],
+          [money(totals.debt), "Qarz"],
+        ].map(([number, label]) => (
+          <div className="panel stat" key={label}>
+            <strong>{number}</strong>
+            <span>{label}</span>
+          </div>
+        ))}
       </div>
+
       <section className="panel detail-panel">
         <h2>Kurslar va hisob-kitob</h2>
+
         <div className="table-scroll">
           <table>
             <thead>
@@ -111,34 +270,62 @@ export default function StudentDetail() {
                 <th>Amal</th>
               </tr>
             </thead>
+
             <tbody>
-              {enrollments.map(e => {
-              const s = enrollmentSummary(data, e);
-              return <tr key={e.id}>
+              {enrollments.map((enrollment) => {
+                const summary = enrollmentSummary(
+                  data,
+                  enrollment
+                );
+
+                return (
+                  <tr key={enrollment.id}>
                     <td>
-                      {data.courses.find(c => c.id === e.courseId)?.title}
+                      {
+                        data.courses.find(
+                          (course) =>
+                            course.id === enrollment.courseId
+                        )?.title
+                      }
                     </td>
-                    <td>{money(s.fee)}</td>
-                    <td>{money(s.paid)}</td>
+
+                    <td>{money(summary.fee)}</td>
+                    <td>{money(summary.paid)}</td>
+
                     <td>
-                      {money(s.debt)}
-                      {s.credit > 0 && <small>Ortiqcha: {money(s.credit)}</small>}
+                      {money(summary.debt)}
+
+                      {summary.credit > 0 && (
+                        <small>
+                          Ortiqcha: {money(summary.credit)}
+                        </small>
+                      )}
                     </td>
+
                     <td>
-                      <button className="secondary" onClick={() => setFeeEdit(e)}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setFeeEdit(enrollment)}
+                      >
                         Narxni tahrirlash
                       </button>
                     </td>
-                  </tr>;
-            })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
+
       <section className="panel detail-panel">
         <h2>To‘lov qo‘shish</h2>
+
         <PaymentForm studentId={studentId} />
+
         <h3>To‘lov tarixi</h3>
+
         <div className="table-scroll">
           <table>
             <thead>
@@ -150,30 +337,54 @@ export default function StudentDetail() {
                 <th>Amal</th>
               </tr>
             </thead>
+
             <tbody>
-              {[...payments].reverse().map(p => <tr key={p.id}>
-                  <td>{p.date}</td>
+              {[...payments].reverse().map((payment) => (
+                <tr key={payment.id}>
+                  <td>{payment.date}</td>
+
                   <td>
-                    {data.courses.find(c => c.id === p.courseId)?.title}
-                    <small>{p.note}</small>
+                    {
+                      data.courses.find(
+                        (course) =>
+                          course.id === payment.courseId
+                      )?.title
+                    }
+
+                    <small>{payment.note}</small>
                   </td>
-                  <td>{money(p.amount)}</td>
+
+                  <td>{money(payment.amount)}</td>
+
                   <td>
-                    {p.voidedAt ? "Bekor qilingan" : "Qayd etilgan"}
-                    <small>{p.voidReason}</small>
+                    {payment.voidedAt
+                      ? "Bekor qilingan"
+                      : "Qayd etilgan"}
+
+                    <small>{payment.voidReason}</small>
                   </td>
+
                   <td>
-                    {!p.voidedAt && <button className="secondary" onClick={() => setVoiding(p)}>
+                    {!payment.voidedAt && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setVoiding(payment)}
+                      >
                         Bekor qilish
-                      </button>}
+                      </button>
+                    )}
                   </td>
-                </tr>)}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </section>
+
       <section className="panel detail-panel">
         <h2>Ko‘rilgan darslar</h2>
+
         <div className="table-scroll">
           <table>
             <thead>
@@ -183,100 +394,235 @@ export default function StudentDetail() {
                 <th>Sana</th>
               </tr>
             </thead>
+
             <tbody>
-              {lessons.map(l => <tr key={l.id}>
+              {lessons.map((lesson) => (
+                <tr key={lesson.id}>
                   <td>
-                    {l.title}
+                    {lesson.title}
+
                     <small>
-                      {data.courses.find(c => c.id === l.courseId)?.title}
+                      {
+                        data.courses.find(
+                          (course) =>
+                            course.id === lesson.courseId
+                        )?.title
+                      }
                     </small>
                   </td>
+
                   <td>
-                    {data.progress[studentId]?.[l.id]?.watched ? "Yakunlangan" : "Yakunlanmagan"}
+                    {data.progress[studentId]?.[lesson.id]?.watched
+                      ? "Yakunlangan"
+                      : "Yakunlanmagan"}
                   </td>
+
                   <td>
-                    {data.progress[studentId]?.[l.id]?.watchedAt ? new Date(data.progress[studentId][l.id].watchedAt).toLocaleString("uz-UZ") : "—"}
+                    {data.progress[studentId]?.[lesson.id]
+                      ?.watchedAt
+                      ? new Date(
+                          data.progress[studentId][lesson.id]
+                            .watchedAt
+                        ).toLocaleString("uz-UZ")
+                      : "—"}
                   </td>
-                </tr>)}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </section>
+
       <section className="panel detail-panel">
         <h2>Test natijalari tarixi</h2>
+
         {!attempts.length && <p>Hali test topshirilmagan.</p>}
-        {[...attempts].reverse().map(a => <details className="attempt-detail" key={a.id}>
+
+        {[...attempts].reverse().map((attempt) => (
+          <details
+            className="attempt-detail"
+            key={attempt.id}
+          >
             <summary>
-              {a.lessonTitle || data.lessons.find(l => l.id === a.lessonId)?.title || "Eski dars"}{" "}
-              · {a.score.toFixed(2)}% · {attemptPassed(a) ? "O‘tdi" : "O‘tmadi"}
+              {attempt.lessonTitle ||
+                data.lessons.find(
+                  (lesson) => lesson.id === attempt.lessonId
+                )?.title ||
+                "Eski dars"}{" "}
+              · {attempt.score.toFixed(2)}% ·{" "}
+              {attemptPassed(attempt) ? "O‘tdi" : "O‘tmadi"}
             </summary>
-            <p>{new Date(a.createdAt).toLocaleString("uz-UZ")}</p>
-            {a.questions?.map((q, i) => <div className="submission" key={q.id}>
+
+            <p>
+              {new Date(attempt.createdAt).toLocaleString(
+                "uz-UZ"
+              )}
+            </p>
+
+            {attempt.questions?.map((question, index) => (
+              <div className="submission" key={question.id}>
                 <strong>
-                  {i + 1}. {q.text}
+                  {index + 1}. {question.text}
                 </strong>
-                <p>Talaba: {q.options[a.answers?.[q.id]] ?? "—"}</p>
-                <p>To‘g‘ri javob: {q.options[q.correct]}</p>
-              </div>)}
-          </details>)}
+
+                <p>
+                  Talaba:{" "}
+                  {question.options[
+                    attempt.answers?.[question.id]
+                  ] ?? "—"}
+                </p>
+
+                <p>
+                  To‘g‘ri javob:{" "}
+                  {question.options[question.correct]}
+                </p>
+              </div>
+            ))}
+          </details>
+        ))}
       </section>
+
       <section className="panel detail-panel">
         <h2>Amaliy natijalar tarixi</h2>
+
         {!submissions.length && <p>Hali topshirilmagan.</p>}
-        {[...submissions].reverse().map(s => <article className="submission" key={s.id}>
-            <h3>{s.lessonTitle}</h3>
-            <p>{s.answer}</p>
-            {s.attachment && <button className="secondary" onClick={() => download(s.attachment)}>
-                {s.attachment.name} ↓
-              </button>}
-            <p>{new Date(s.createdAt).toLocaleString("uz-UZ")}</p>
+
+        {[...submissions].reverse().map((submission) => (
+          <article
+            className="submission"
+            key={submission.id}
+          >
+            <h3>{submission.lessonTitle}</h3>
+            <p>{submission.answer}</p>
+
+            {submission.attachment && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => download(submission.attachment)}
+              >
+                {submission.attachment.name} ↓
+              </button>
+            )}
+
+            <p>
+              {new Date(submission.createdAt).toLocaleString(
+                "uz-UZ"
+              )}
+            </p>
+
             <span className="badge">
-              {{
-            pending: "Tekshirilmoqda",
-            approved: "Tasdiqlangan",
-            rejected: "Qaytarilgan"
-          }[s.status]}
+              {
+                {
+                  pending: "Tekshirilmoqda",
+                  approved: "Tasdiqlangan",
+                  rejected: "Qaytarilgan",
+                }[submission.status]
+              }
             </span>
-            <p>Baho: {s.grade ?? "—"} / 100</p>
-            <p>Admin izohi: {s.feedback || "—"}</p>
-          </article>)}
-        <Link className="primary inline-button" to="/admin/reviews">
+
+            <p>Baho: {submission.grade ?? "—"} / 100</p>
+
+            <p>Admin izohi: {submission.feedback || "—"}</p>
+          </article>
+        ))}
+
+        <Link
+          className="primary inline-button"
+          to="/admin/reviews"
+        >
           Amaliy ishlarni tekshirish
         </Link>
       </section>
+
       <section className="panel detail-panel">
         <h2>Berilgan sertifikatlar</h2>
-        {data.certificates.filter(c => c.userId === studentId).map(c => <div className="row" key={c.id}>
+
+        {data.certificates
+          .filter(
+            (certificate) => certificate.userId === studentId
+          )
+          .map((certificate) => (
+            <div className="row" key={certificate.id}>
               <span>
-                {c.title} · {c.score.toFixed(2)}%
+                {certificate.title} ·{" "}
+                {certificate.score.toFixed(2)}%
               </span>
-              <button className="secondary" onClick={() => downloadCertificate(c).catch(e => notify(e.message))}>
+
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  downloadCertificate(certificate).catch(
+                    (error) => notify(error.message)
+                  )
+                }
+              >
                 PDF yuklash
               </button>
-            </div>)}
+            </div>
+          ))}
       </section>
-      {edit && <StudentForm student={student} onClose={() => setEdit(false)} onSaved={() => setEdit(false)} />}{" "}
-      {voiding && <Modal title="To‘lovni bekor qilish" onClose={() => setVoiding(null)}>
+
+      {edit && (
+        <StudentForm
+          student={student}
+          onClose={() => setEdit(false)}
+          onSaved={() => setEdit(false)}
+        />
+      )}
+
+      {voiding && (
+        <Modal
+          title="To‘lovni bekor qilish"
+          onClose={() => setVoiding(null)}
+        >
           <form onSubmit={voidPayment}>
             <p>
-              {money(voiding.amount)} hisobdan chiqariladi, yozuv tarixda
-              saqlanadi.
+              {money(voiding.amount)} hisobdan chiqariladi,
+              yozuv tarixda saqlanadi.
             </p>
+
             <label>
               Sabab
-              <textarea name="reason" required minLength={5} />
+              <textarea
+                name="reason"
+                required
+                minLength={5}
+              />
             </label>
-            <button className="primary">Ha, bekor qilish</button>
+
+            <button type="submit" className="primary">
+              Ha, bekor qilish
+            </button>
           </form>
-        </Modal>}
-      {feeEdit && <Modal title="Kelishilgan narx" onClose={() => setFeeEdit(null)}>
+        </Modal>
+      )}
+
+      {feeEdit && (
+        <Modal
+          title="Kelishilgan narx"
+          onClose={() => setFeeEdit(null)}
+        >
           <form onSubmit={fee}>
             <label>
               Narx (so‘m)
-              <input type="number" min="0" step="1" required name="fee" defaultValue={feeEdit.fee} />
+              <input
+                type="number"
+                min="0"
+                step="1"
+                required
+                name="fee"
+                defaultValue={feeEdit.fee}
+              />
             </label>
-            <button className="primary">Saqlash</button>
+
+            <button type="submit" className="primary">
+              Saqlash
+            </button>
           </form>
-        </Modal>}
-    </>;
+        </Modal>
+      )}
+    </>
+  );
 }

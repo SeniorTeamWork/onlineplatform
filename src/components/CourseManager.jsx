@@ -114,9 +114,9 @@ export default function CourseManager({
                   <Plus size={22} /> Yangi kurs
                 </button>
               </div>
-              <p className="muted">
+              {/* <p className="muted">
                 {courses.length} ta kurs · narxlar va o‘quvchilar
-              </p>
+              </p> */}
               <div className="course-modal-list">
                 {courses.map(c => <article className="course-manage-card" key={c.id}>
                     <div className="course-manage-icon">

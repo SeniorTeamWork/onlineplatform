@@ -70,7 +70,7 @@ function LessonContent({
   const lesson = data.lessons.find(l => l.id === id);
   if (!lesson || !unlocked(data, user.id, id)) return <div className="empty">
         Dars yopiq yoki mavjud emas. <Link to="/student">Kurslarim</Link>
-      </div>;
+      </div>; 
   const key = user.id + ":" + id,
     session = data.testSessions[key];
   const attempts = data.attempts.filter(a => a.userId === user.id && a.lessonId === id),
@@ -143,7 +143,7 @@ function LessonContent({
         ← Kursga qaytish
       </Link>
       <h1>{lesson.title}</h1>
-      <p>{lesson.description}</p>
+      {/* <p>{lesson.description}</p> */} <br />
       <Player lesson={lesson} watermark={user.name + " · " + user.email} onEnd={() => update(d => {
       d.progress[user.id] ??= {};
       d.progress[user.id][id] = {
@@ -152,7 +152,7 @@ function LessonContent({
       };
     })} />
       <p>
-        {data.progress[user.id]?.[id]?.watched ? "✓ Video yakunlangan" : "Video oxirigacha ko‘rilgach holat saqlanadi."}
+        {data.progress[user.id]?.[id]?.watched ? "✓ Video yakunlangan" : " "}
       </p>
       <div className="tabs" role="tablist" aria-label="Dars bo‘limlari">
         {[["test", "1. Test"], ["practice", "2. Amaliy"], ["materials", "3. Qo‘shimcha materiallar"]].map(([k, v]) => <button key={k} role="tab" aria-selected={tab === k} aria-controls={"panel-" + k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
@@ -162,10 +162,10 @@ function LessonContent({
       <section className="panel task-panel" role="tabpanel" id={"panel-" + tab}>
         {tab === "test" ? <>
             <h2>Bilimingizni tekshiring</h2>
-            <p>
+            {/* <p>
               O‘tish sharti: 70% dan yuqori. Natijalar tahrirlanmaydi; qayta
               urinish boshidan boshlanadi.
-            </p>
+            </p> */}
             {session ? <form onSubmit={finish}>
                 {session.questions.map((q, i) => <fieldset key={q.id}>
                     <legend>

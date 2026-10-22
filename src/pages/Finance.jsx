@@ -1,108 +1,180 @@
-import Expenses from '../components/Expenses';
-import Statistics from "../components/Statistics";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+
+import Statistics from "../components/Statistics";
+
 import { useApp } from "../context/AppContext";
-import { paymentSummary, enrollmentSummary, money, localDate } from "../services/db";
-import PaymentForm from "../components/PaymentForm";
+
+import {
+  paymentSummary,
+  enrollmentSummary,
+  money,
+  localDate,
+} from "../services/db";
+
 import "./Admin.css";
+
 export default function Finance() {
-  const {
-    data
-  } = useApp();
-  const [debtors, setDebtors] = useState(false),
-    [query, setQuery] = useState(""),
-    [from, setFrom] = useState(""),
-    [to, setTo] = useState("");
-  const students = data.users.filter(u => u.role === "student");
-  const rows = students.map(u => ({
-    u,
-    ...paymentSummary(data, u)
+  const { data } = useApp();
+
+  const [status, setStatus] = useState("all");
+  const [studentId, setStudentId] = useState("");
+  const [query, setQuery] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const students = data.users.filter(
+    (user) => user.role === "student"
+  );
+
+  const rows = students.map((student) => ({
+    student,
+    ...paymentSummary(data, student),
   }));
-  const totals = rows.reduce((a, r) => {
-    for (const k of ["fee", "paid", "debt", "credit"]) a[k] += r[k];
-    return a;
-  }, {
-    fee: 0,
-    paid: 0,
-    debt: 0,
-    credit: 0
-  });
-  const payments = data.payments.filter(p => !p.voidedAt && (!from || p.date >= from) && (!to || p.date <= to));
-  const filtered = rows.filter(r => (!debtors || r.debt > 0) && (r.u.name + " " + r.u.email).toLowerCase().includes(query.toLowerCase()));
-  return <>
+
+  const totals = rows.reduce(
+    (result, row) => {
+      for (const key of [
+        "fee",
+        "paid",
+        "debt",
+        "credit",
+      ]) {
+        result[key] += row[key];
+      }
+
+      return result;
+    },
+    {
+      fee: 0,
+      paid: 0,
+      debt: 0,
+      credit: 0,
+    }
+  );
+
+  const periodPayments = data.payments.filter(
+    (payment) =>
+      !payment.voidedAt &&
+      (!from || payment.date >= from) &&
+      (!to || payment.date <= to)
+  );
+
+  const filtered = rows
+    .filter((row) => {
+      const matchesName = (
+        row.student.name +
+        " " +
+        (row.student.email || "")
+      )
+        .toLowerCase()
+        .includes(query.trim().toLowerCase());
+
+      const matchesStudent =
+        !studentId ||
+        row.student.id === studentId;
+
+      const matchesStatus =
+        status === "all" ||
+        (status === "paid" && row.paid > 0) ||
+        (status === "unpaid" && row.paid === 0) ||
+        (status === "debtors" && row.debt > 0) ||
+        (status === "trial" && row.debt > 0);
+
+      return (
+        matchesName &&
+        matchesStudent &&
+        matchesStatus
+      );
+    })
+    .map((row) => {
+      const payments = periodPayments
+        .filter(
+          (payment) =>
+            payment.userId === row.student.id
+        )
+        .sort((a, b) =>
+          b.date.localeCompare(a.date)
+        );
+
+      return {
+        ...row,
+        payments,
+        periodPaid: payments.reduce(
+          (sum, payment) => sum + payment.amount,
+          0
+        ),
+      };
+    });
+
+  const periodTotal = filtered.reduce(
+    (sum, row) => sum + row.periodPaid,
+    0
+  );
+
+  return (
+    <>
       <div className="page-heading">
         <div>
           <h1>Moliya</h1>
-          <p>Kurslar bo‘yicha to‘lovlar va qarzdorlik nazorati</p>
         </div>
       </div>
+
       <div className="stats">
         <div className="panel stat">
-          <strong>{students.length}</strong>
+          <strong style={{ fontSize: "30px" }}>
+            {students.length}
+          </strong>
+
           <span>Talabalar</span>
         </div>
+
         <div className="panel stat">
-          <strong>{money(totals.fee)}</strong>
-          <span>Jami shartnoma qiymati</span>
+          <strong style={{ fontSize: "30px" }}>
+            {money(totals.fee)}
+          </strong>
+
+          <span>To‘lanishi kerak</span>
         </div>
+
         <div className="panel stat">
-          <strong>{money(totals.paid)}</strong>
+          <strong style={{ fontSize: "30px" }}>
+            {money(totals.paid)}
+          </strong>
+
           <span>To‘langan</span>
         </div>
-        <button className="panel stat" onClick={() => setDebtors(true)}>
-          <strong>{rows.filter(r => r.debt > 0).length}</strong>
+
+        <button
+          type="button"
+          className="panel stat"
+          onClick={() => setStatus("debtors")}
+        >
+          <strong style={{ fontSize: "30px" }}>
+            {
+              rows.filter(
+                (row) => row.debt > 0
+              ).length
+            }
+          </strong>
+
           <span>Qarzdorlar →</span>
         </button>
+
         <div className="panel stat">
-          <strong>{money(totals.debt)}</strong>
+          <strong style={{ fontSize: "30px" }}>
+            {money(totals.debt)}
+          </strong>
+
           <span>Jami qarz</span>
         </div>
-        <div className="panel stat">
-          <strong>{money(totals.credit)}</strong>
-          <span>Avvalgi ortiqcha to‘lov</span>
-        </div>
       </div>
-      <section className="panel detail-panel">
-        <h2>To‘lov qo‘shish</h2>
-        <PaymentForm />
-      </section>
-      <section className="panel detail-panel">
-        <div className="row">
-          <h2>{debtors ? "Barcha qarzdorlar" : "Talabalar balansi"}</h2>
-          <button className="secondary" onClick={() => setDebtors(!debtors)}>
-            {debtors ? "Barchasi" : "Faqat qarzdorlar"}
-          </button>
-        </div>
-        <input aria-label="Qarzdorlarni qidirish" placeholder="Talabani qidiring" value={query} onChange={e => setQuery(e.target.value)} />
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Talaba</th>
-                <th>Kurs qiymati</th>
-                <th>To‘lov</th>
-                <th>Qarz</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(r => <tr key={r.u.id}>
-                  <td>
-                    <Link className="purple" to={"/admin/students/" + r.u.id}>
-                      {r.u.name} →
-                    </Link>
-                  </td>
-                  <td>{money(r.fee)}</td>
-                  <td>{money(r.paid)}</td>
-                  <td>{money(r.debt)}</td>
-                </tr>)}
-            </tbody>
-          </table>
-          {!filtered.length && <p>Natija yo‘q.</p>}
-        </div>
-      </section>
+
+      <Statistics />
+
       <section className="panel detail-panel">
         <h2>Kurslar statistikasi</h2>
+
         <div className="table-scroll">
           <table>
             <thead>
@@ -113,67 +185,245 @@ export default function Finance() {
                 <th>Qarz</th>
               </tr>
             </thead>
+
             <tbody>
-              {data.courses.map(c => {
-              const es = data.enrollments.filter(e => e.courseId === c.id),
-                s = es.map(e => enrollmentSummary(data, e));
-              return <tr key={c.id}>
-                    <td>{c.title}</td>
-                    <td>{es.length}</td>
-                    <td>{money(s.reduce((n, x) => n + x.paid, 0))}</td>
-                    <td>{money(s.reduce((n, x) => n + x.debt, 0))}</td>
-                  </tr>;
-            })}
+              {data.courses.map((course) => {
+                const enrollments =
+                  data.enrollments.filter(
+                    (enrollment) =>
+                      enrollment.courseId === course.id
+                  );
+
+                const summaries = enrollments.map(
+                  (enrollment) =>
+                    enrollmentSummary(data, enrollment)
+                );
+
+                return (
+                  <tr key={course.id}>
+                    <td>{course.title}</td>
+
+                    <td>{enrollments.length}</td>
+
+                    <td>
+                      {money(
+                        summaries.reduce(
+                          (sum, summary) =>
+                            sum + summary.paid,
+                          0
+                        )
+                      )}
+                    </td>
+
+                    <td>
+                      {money(
+                        summaries.reduce(
+                          (sum, summary) =>
+                            sum + summary.debt,
+                          0
+                        )
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
-      <Statistics />
+
       <section className="panel detail-panel">
-        <h2>To‘lov qilganlar ro‘yxati</h2>
+        <h2>Talabalar </h2>
+
         <div className="form-grid">
           <label>
-            Dan
-            <input type="date" max={to || localDate()} value={from} onChange={e => setFrom(e.target.value)} />
+            Ro‘yxat
+
+            <select
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value)
+              }
+            >
+              <option value="all">
+                Barcha talabalar
+              </option>
+
+              <option value="paid">
+                To‘lov qilgan talabalar
+              </option>
+
+              <option value="unpaid">
+                To‘lov qilmagan talabalar
+              </option>
+
+              <option value="debtors">
+                Qarzdor talabalar
+              </option>
+              <option value="trial">
+                Sinovdagi talabalar
+              </option>
+            </select>
           </label>
+
+          {/* <label>
+            Talabani tanlang
+
+            <select
+              value={studentId}
+              onChange={(event) =>
+                setStudentId(event.target.value)
+              }
+            >
+              <option value="">
+                Barcha talabalar
+              </option>
+
+              {students.map((student) => (
+                <option
+                  key={student.id}
+                  value={student.id}
+                >
+                  {student.name}
+                </option>
+              ))}
+            </select>
+          </label> */}
+        </div>
+
+        <input
+          aria-label="Talabani qidirish"
+          placeholder="Talabani qidiring"
+          value={query}
+          onChange={(event) =>
+            setQuery(event.target.value)
+          }
+        />
+
+        {/* <div className="form-grid">
+          <label>
+            Dan
+
+            <input
+              type="date"
+              max={to || localDate()}
+              value={from}
+              onChange={(event) =>
+                setFrom(event.target.value)
+              }
+            />
+          </label>
+
           <label>
             Gacha
-            <input type="date" min={from} max={localDate()} value={to} onChange={e => setTo(e.target.value)} />
+
+            <input
+              type="date"
+              min={from}
+              max={localDate()}
+              value={to}
+              onChange={(event) =>
+                setTo(event.target.value)
+              }
+            />
           </label>
-        </div>
-        <p>
-          Tanlangan davr:{" "}
-          <strong>{money(payments.reduce((n, p) => n + p.amount, 0))}</strong>
-        </p>
+        </div> */}
+
+        {/* <p>
+          Tanlangan davrdagi to‘lovlar:{" "}
+          <strong>{money(periodTotal)}</strong>
+        </p> */}
+
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Sana</th>
-                <th>Talaba / kurs</th>
-                <th>Miqdor</th>
-                <th>Usul</th>
+                <th>Talaba</th>
+                <th>Kurs qiymati</th>
+                <th>Jami to‘lov</th>
+                <th>Davrdagi to‘lov</th>
+                <th>Qarz</th>
+                {/* <th>To‘lov tarixi</th> */}
               </tr>
             </thead>
+
             <tbody>
-              {[...payments].sort((a, b) => b.date.localeCompare(a.date)).map(p => <tr key={p.id}>
-                    <td>{p.date}</td>
-                    <td>
-                      <Link to={"/admin/students/" + p.userId}>
-                        {data.users.find(u => u.id === p.userId)?.name}
-                      </Link>
-                      <small>
-                        {data.courses.find(c => c.id === p.courseId)?.title}
-                      </small>
-                    </td>
-                    <td>{money(p.amount)}</td>
-                    <td>{p.method}</td>
-                  </tr>)}
+              {filtered.map((row) => (
+                <tr key={row.student.id}>
+                  <td>
+                    <Link
+                      className="purple"
+                      to={
+                        "/admin/students/" +
+                        row.student.id
+                      }
+                    >
+                      {row.student.name} →
+                    </Link>
+                  </td>
+
+                  <td>{money(row.fee)}</td>
+
+                  <td>{money(row.paid)}</td>
+
+                  <td>{money(row.periodPaid)}</td>
+
+                  <td>{money(row.debt)}</td>
+
+                  {/* <td>
+                    {row.payments.length ? (
+                      <details>
+                        <summary>
+                          {row.payments.length} ta to‘lov
+                        </summary>
+
+                        {row.payments.map((payment) => (
+                          <div
+                            className="submission"
+                            key={payment.id}
+                          >
+                            <strong>
+                              {money(payment.amount)}
+                            </strong>
+
+                            <small>
+                              Sana: {payment.date}
+                            </small>
+
+                            <small>
+                              {
+                                data.courses.find(
+                                  (course) =>
+                                    course.id ===
+                                    payment.courseId
+                                )?.title
+                              }
+                            </small>
+
+                            <small>
+                              Usul: {payment.method}
+                            </small>
+                          </div>
+                        ))}
+                      </details>
+                    ) : (
+                      <span>
+                        {from || to
+                          ? "Bu davrda to‘lov yo‘q"
+                          : "To‘lov qilinmagan"}
+                      </span>
+                    )}
+                  </td> */}
+                </tr>
+              ))}
             </tbody>
           </table>
-          {!payments.length && <p>To‘lovlar yo‘q.</p>}
+
+          {!filtered.length && (
+            <p>Natija yo‘q.</p>
+          )}
         </div>
       </section>
-      <Expenses />
-    </>;
+    </>
+  );
 }
