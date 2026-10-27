@@ -6,8 +6,16 @@ import {
   useEffect,
 } from "react";
 
-import { read, write, migrate } from "../services/db";
-import { cloudEnabled, api } from "../services/cloud";
+import {
+  read,
+  write,
+  migrate,
+} from "../services/db";
+
+import {
+  cloudEnabled,
+  api,
+} from "../services/cloud";
 
 import {
   supabase,
@@ -58,7 +66,8 @@ export function AppProvider({ children }) {
   );
 
   const user = data.users.find(
-    (account) => account.id === session && account.active
+    (account) =>
+      account.id === session && account.active
   );
 
   function accept(result) {
@@ -83,6 +92,7 @@ export function AppProvider({ children }) {
           const next = read();
 
           current.current = next;
+
           setData(next);
 
           lastSaved.current = localStorage.getItem(
@@ -95,13 +105,15 @@ export function AppProvider({ children }) {
 
       window.addEventListener("storage", changed);
 
-      return () =>
+      return () => {
         window.removeEventListener("storage", changed);
+      };
     }
 
     if (!supabase) {
       setLoading(false);
       setNotice(supabaseConfigError);
+
       return;
     }
 
@@ -116,13 +128,12 @@ export function AppProvider({ children }) {
         if (authSession) {
           const result = await api("read");
 
-          if (alive) {
-            accept(result);
-          }
+          if (alive) accept(result);
         } else {
           const next = empty();
 
           current.current = next;
+
           setData(next);
         }
       } catch (error) {
@@ -131,9 +142,7 @@ export function AppProvider({ children }) {
           setSession(null);
         }
       } finally {
-        if (alive) {
-          setLoading(false);
-        }
+        if (alive) setLoading(false);
       }
     }
 
@@ -152,15 +161,16 @@ export function AppProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (event) => {
+      (event, authSession) => {
         if (event === "SIGNED_OUT") {
-          restore(null);
+          restore(authSession);
         }
       }
     );
 
     return () => {
       alive = false;
+
       subscription.unsubscribe();
     };
   }, []);
@@ -172,7 +182,7 @@ export function AppProvider({ children }) {
           localStorage.getItem("ai-academy-v1") !==
           lastSaved.current
         ) {
-          throw new Error(
+          throw Error(
             "Boshqa oynada ma’lumot o‘zgargan. Sahifani yangilang."
           );
         }
@@ -187,11 +197,13 @@ export function AppProvider({ children }) {
         );
 
         current.current = next;
+
         setData(next);
 
         return true;
       } catch (error) {
         setNotice(error.message);
+
         return false;
       }
     }
@@ -217,7 +229,9 @@ export function AppProvider({ children }) {
 
         try {
           await refresh();
-        } catch {}
+        } catch {
+          // Asl xato xabari ekranda qoladi.
+        }
 
         return false;
       } finally {
@@ -230,45 +244,49 @@ export function AppProvider({ children }) {
     return job;
   }
 
-  async function command(action, payload) {
-    setSaving(true);
-
-    try {
-      await queue.current;
-
-      const result = await api(action, {
-        ...payload,
-        revision: revision.current,
-      });
-
-      if (result.data) {
-        accept(result);
-      }
-
-      return result;
-    } catch (error) {
-      setNotice(error.message);
+  function command(action, payload = {}) {
+    const job = queue.current.then(async () => {
+      setSaving(true);
 
       try {
-        await refresh();
-      } catch {}
+        const result = await api(action, {
+          ...payload,
+          revision: revision.current,
+        });
 
-      throw error;
-    } finally {
-      setSaving(false);
-    }
+        if (result.data) {
+          accept(result);
+        }
+
+        return result;
+      } catch (error) {
+        setNotice(error.message);
+
+        try {
+          await refresh();
+        } catch {
+          // Asl xato xabari saqlanadi.
+        }
+
+        throw error;
+      } finally {
+        setSaving(false);
+      }
+    });
+
+    queue.current = job.catch(() => {});
+
+    return job;
   }
 
   async function login(
-    identifier,
+    loginValue,
     password,
     remember = true
   ) {
-    const value = identifier.trim();
-
     if (cloudEnabled) {
       if (!supabase) {
-        throw new Error(supabaseConfigError);
+        throw Error(supabaseConfigError);
       }
 
       sessionStorage.setItem(
@@ -277,7 +295,7 @@ export function AppProvider({ children }) {
       );
 
       const result = await api("login", {
-        login: value,
+        login: loginValue.trim(),
         password,
       });
 
@@ -289,16 +307,16 @@ export function AppProvider({ children }) {
       if (error) throw error;
 
       try {
-        const loaded = await refresh();
+        const refreshed = await refresh();
 
-        const account = loaded.data.users.find(
+        const account = refreshed.data.users.find(
           (item) =>
             item.id === authData.user.id &&
             item.active
         );
 
         if (!account) {
-          throw new Error("Hisob faol emas.");
+          throw Error("Hisob faol emas.");
         }
 
         setSession(account.id);
@@ -307,26 +325,24 @@ export function AppProvider({ children }) {
         return account;
       } catch (error) {
         await supabase.auth.signOut();
+
         throw error;
       }
     }
 
-    const normalized = value.toLowerCase();
+    const normalized = loginValue.trim().toLowerCase();
 
     const account = current.current.users.find(
       (item) =>
-        (
-          String(item.username || "").toLowerCase() ===
-            normalized ||
-          String(item.email || "").toLowerCase() ===
-            normalized
-        ) &&
+        (String(item.username || "").toLowerCase() ===
+          normalized ||
+          item.email.toLowerCase() === normalized) &&
         item.password === password &&
         item.active
     );
 
     if (!account) {
-      throw new Error(
+      throw Error(
         "Login yoki parol noto‘g‘ri, yoki hisob bloklangan."
       );
     }
@@ -337,16 +353,16 @@ export function AppProvider({ children }) {
       "ai-academy-v1"
     );
 
-    const storage = remember
+    const target = remember
       ? localStorage
       : sessionStorage;
 
-    const otherStorage = remember
+    const other = remember
       ? sessionStorage
       : localStorage;
 
-    storage.setItem("academy-user", account.id);
-    otherStorage.removeItem("academy-user");
+    target.setItem("academy-user", account.id);
+    other.removeItem("academy-user");
 
     setSession(account.id);
     setNotice("");
@@ -360,6 +376,7 @@ export function AppProvider({ children }) {
 
       if (error) {
         setNotice(error.message);
+
         return false;
       }
     }
@@ -403,7 +420,7 @@ export function AppProvider({ children }) {
           Saqlanmoqda…
         </div>
       )}
-
+StudentPasswordForm.jsx
       {notice && (
         <div className="toast" role="status">
           {notice}

@@ -4,11 +4,18 @@ import { useApp } from "../context/AppContext";
 import { availableUsername } from "../services/identity";
 import { uid } from "../services/db";
 
+import {
+  ADMIN_PAGES,
+  isOwner,
+  validAdminPages,
+} from "../services/adminAccess";
+
 import Modal from "./Modal";
 
 export default function AdminAccountForm({ onClose }) {
   const {
     data,
+    user,
     cloud,
     command,
     update,
@@ -18,6 +25,7 @@ export default function AdminAccountForm({ onClose }) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [pages, setPages] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -30,50 +38,53 @@ export default function AdminAccountForm({ onClose }) {
     setError("");
 
     try {
-      const login = availableUsername(
-        data,
-        username
-      );
+      if (!isOwner(user)) {
+        throw Error(
+          "Yangi adminni faqat asosiy admin yaratishi mumkin."
+        );
+      }
+
+      const login = availableUsername(data, username);
+      const adminPages = validAdminPages(pages);
 
       if (
         name.trim().length < 3 ||
         password.length < 8
       ) {
-        throw new Error(
+        throw Error(
           "Ism kamida 3, parol kamida 8 belgi bo‘lsin."
         );
       }
 
       if (cloud) {
         await command("createAdmin", {
-          name,
+          name: name.trim(),
           username: login,
           password,
+          adminPages,
         });
       } else {
-        const success = await update((next) => {
-          next.users.push({
+        const saved = await update((draft) => {
+          draft.users.push({
             id: uid(),
             name: name.trim(),
             username: login,
             email: login + "@academy.invalid",
             password,
+            adminPages,
             role: "admin",
             active: true,
             createdAt: new Date().toISOString(),
           });
         });
 
-        if (!success) return;
+        if (!saved) return;
       }
 
-      notify(
-        "Yangi admin yaratildi. Login: " + login
-      );
-
+      notify("Yangi admin yaratildi. Login: " + login);
       onClose();
-    } catch (err) {
-      setError(err.message);
+    } catch (saveError) {
+      setError(saveError.message);
     } finally {
       setBusy(false);
     }
@@ -105,8 +116,8 @@ export default function AdminAccountForm({ onClose }) {
             required
             minLength={3}
             maxLength={40}
-            autoComplete="off"
             autoCapitalize="none"
+            autoComplete="off"
             spellCheck={false}
             value={username}
             onChange={(event) =>
@@ -129,9 +140,42 @@ export default function AdminAccountForm({ onClose }) {
             }
           />
         </label>
-a
+
+        <fieldset>
+          <legend>
+            Admin kira oladigan sahifalar
+          </legend>
+
+          {ADMIN_PAGES.map((page) => (
+            <label
+              className="check-card"
+              key={page.id}
+            >
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={pages.includes(page.id)}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+
+                  setPages((previous) =>
+                    checked
+                      ? [...previous, page.id]
+                      : previous.filter(
+                          (id) => id !== page.id
+                        )
+                  );
+                }}
+              />
+
+              <span>{page.title}</span>
+            </label>
+          ))}
+        </fieldset>
+
         <p>
-          Bu hisob barcha admin bo‘limlariga kira oladi.
+          Kamida bitta sahifani tanlang.
+          Yangi admin boshqa admin yarata olmaydi.
         </p>
 
         {error && (
@@ -143,9 +187,15 @@ a
         <button
           type="submit"
           className="primary"
-          disabled={busy}
+          disabled={
+            busy ||
+            !pages.length ||
+            !isOwner(user)
+          }
         >
-          {busy ? "Saqlanmoqda…" : "Adminni yaratish"}
+          {busy
+            ? "Saqlanmoqda…"
+            : "Adminni yaratish"}
         </button>
       </form>
     </Modal>

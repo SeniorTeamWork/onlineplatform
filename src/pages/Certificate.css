@@ -1,20 +1,802 @@
-.certificate {
-  margin: 30px 0;
-  padding: 45px 25px;
-  border: 8px double var(--primary-border);
-  background: var(--surface);
+:root {
+  --ac-primary: var(--primary, #080acd);
+  --ac-primary-hover: #0608a5;
+  --ac-primary-light: #eef1ff;
+  --ac-primary-border: #dce3ff;
+
+  --ac-surface: #ffffff;
+  --ac-soft: #f7f9ff;
+  --ac-border: #e5eaf5;
+
+  --ac-text: #162442;
+  --ac-muted: #68758d;
+
+  --ac-success: #16864b;
+  --ac-success-soft: #eaf9f0;
+  --ac-success-border: #c8ecd6;
+
+  --ac-error: #b42335;
+  --ac-error-bg: #fff1f3;
+
+  --ac-confetti-0: #080acd;
+  --ac-confetti-1: #46baff;
+  --ac-confetti-2: #ffc44d;
+  --ac-confetti-3: #47c98c;
+
+  --ac-shadow: 0 18px 60px rgba(25, 49, 107, 0.07);
+  --ac-button-shadow: 0 10px 24px rgba(8, 10, 205, 0.18);
+  --ac-focus: rgba(8, 10, 205, 0.2);
+
+  --ac-fs-body: 18px;
+  --ac-fs-title: clamp(26px, 4vw, 36px);
+  --ac-fs-success: clamp(36px, 7vw, 54px);
+
+  --ac-radius: 24px;
+}
+
+/* Sahifa */
+
+.ac-page,
+.ac-page * {
+  box-sizing: border-box;
+}
+
+.ac-page {
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 32px;
+  color: var(--ac-text);
+  font-size: var(--ac-fs-body);
+}
+
+.ac-back {
+  display: none;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 12px;
+  color: var(--ac-primary);
+  font-size: var(--ac-fs-body);
+  text-decoration: none;
+}
+
+.ac-heading {
+  margin-bottom: 24px;
+}
+
+.ac-heading h1 {
+  margin: 0;
+  color: var(--ac-text);
+  font-size: var(--ac-fs-title);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.6px;
+}
+
+.ac-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+  width: 100%;
+}
+
+/* Asosiy card */
+
+.ac-card {
+  position: relative;
+  width: 100%;
+  max-width: 660px;
+  min-width: 0;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow);
+  animation: ac-card-enter 450ms ease both;
+}
+
+.ac-stage {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 460px;
+  padding: 42px 32px;
+  overflow: hidden;
   text-align: center;
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      var(--ac-primary-light),
+      transparent 58%
+    ),
+    var(--ac-surface);
 }
-.cert-brand {
-  color: var(--primary);
-  font-size: var(--fs-h2);
-  font-weight: 700;
+
+.ac-stage h2 {
+  position: relative;
+  z-index: 2;
+  max-width: 540px;
+  margin: 22px 0 12px;
+  color: var(--ac-text);
+  font-size: var(--ac-fs-title);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.7px;
 }
-.certificate h2 {
-  color: var(--primary);
-  font-size: var(--fs-title);
-  letter-spacing: 3px;
+
+.ac-description {
+  position: relative;
+  z-index: 2;
+  max-width: 480px;
+  margin: 0 0 26px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-body);
+  line-height: 1.7;
 }
-.certificate h3 {
-  font-size: var(--fs-h2);
+
+.ac-course-name {
+  position: relative;
+  z-index: 2;
+  max-width: 100%;
+  margin-top: 22px;
+  padding: 8px 16px;
+  border: 1px solid var(--ac-primary-border);
+  border-radius: 999px;
+  background: var(--ac-primary-light);
+  color: var(--ac-primary);
+  font-size: var(--ac-fs-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ac-count {
+  position: relative;
+  z-index: 2;
+  margin: 0 0 26px;
+  color: var(--ac-text);
+  font-size: var(--ac-fs-body);
+  font-weight: 600;
+}
+
+/* Belgilar */
+
+.ac-icon,
+.ac-success-icon {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 92px;
+  height: 92px;
+  border: 1px solid var(--ac-primary-border);
+  border-radius: 28px;
+  background: var(--ac-surface);
+  box-shadow: 0 10px 28px var(--ac-focus);
+  color: var(--ac-primary);
+}
+
+/* Tugmalar */
+
+.ac-button {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 100%;
+  min-height: 56px;
+  padding: 15px 25px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: var(--ac-primary);
+  box-shadow: var(--ac-button-shadow);
+  color: var(--ac-surface);
+  font-family: inherit;
+  font-size: var(--ac-fs-body);
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 200ms ease,
+    background 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.ac-button svg {
+  flex-shrink: 0;
+}
+
+.ac-button:hover {
+  transform: translateY(-2px);
+  background: var(--ac-primary-hover);
+  color: var(--ac-surface);
+}
+
+.ac-button:active {
+  transform: translateY(0);
+}
+
+.ac-button:focus-visible,
+.ac-back:focus-visible {
+  outline: 4px solid var(--ac-focus);
+  outline-offset: 4px;
+}
+
+/* Loading markazidagi aylana */
+
+.ac-orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 104px;
+  height: 104px;
+  margin: 8px 0 12px;
+  border: 1px solid var(--ac-primary-border);
+  border-radius: 50%;
+  background: var(--ac-surface);
+  color: var(--ac-primary);
+  box-shadow: 0 0 0 10px var(--ac-primary-light);
+}
+
+.ac-orbit > svg {
+  animation: ac-gentle-pulse 2.2s ease-in-out infinite;
+}
+
+.ac-orbit-ring {
+  position: absolute;
+  inset: -9px;
+  border: 3px solid transparent;
+  border-top-color: var(--ac-primary);
+  border-right-color: var(--ac-confetti-1);
+  border-radius: 50%;
+  animation: ac-rotate 1.8s linear infinite;
+}
+
+.ac-orbit::after {
+  position: absolute;
+  inset: -20px;
+  border: 1px dashed var(--ac-primary-border);
+  border-radius: 50%;
+  content: "";
+  animation: ac-rotate 16s linear infinite reverse;
+}
+
+/* Loading progress */
+
+.ac-progress {
+  width: min(100%, 440px);
+  height: 12px;
+  margin-top: 4px;
+  overflow: hidden;
+  border: 1px solid var(--ac-primary-border);
+  border-radius: 999px;
+  background: var(--ac-primary-light);
+}
+
+.ac-progress > span {
+  position: relative;
+  display: block;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--ac-primary),
+    var(--ac-confetti-1)
+  );
+  transition: width 150ms linear;
+}
+
+.ac-progress > span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 80%
+  );
+  content: "";
+  animation: ac-shimmer 1.8s linear infinite;
+}
+
+.ac-progress-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(100%, 440px);
+  margin-top: 12px;
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-body);
+  line-height: 1.5;
+}
+
+.ac-progress-caption strong {
+  flex-shrink: 0;
+  color: var(--ac-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tekshirish checkboxlari */
+
+.ac-checklist {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 440px);
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.ac-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px solid var(--ac-border);
+  border-radius: 14px;
+  background: var(--ac-surface);
+  color: var(--ac-muted);
+  font-size: var(--ac-fs-body);
+  line-height: 1.4;
+  transition:
+    color 300ms ease,
+    background 300ms ease,
+    border-color 300ms ease,
+    transform 300ms ease;
+}
+
+.ac-step-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ac-border);
+  border-radius: 9px;
+  background: var(--ac-soft);
+}
+
+.ac-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac-muted);
+  opacity: 0.4;
+}
+
+.ac-step.is-current {
+  transform: translateX(3px);
+  border-color: var(--ac-primary-border);
+  background: var(--ac-primary-light);
+  color: var(--ac-primary);
+}
+
+.ac-step.is-current .ac-step-icon {
+  border-color: var(--ac-primary-border);
+  background: var(--ac-surface);
+}
+
+.ac-step.is-done {
+  border-color: var(--ac-success-border);
+  background: var(--ac-success-soft);
+  color: var(--ac-text);
+}
+
+.ac-step.is-done .ac-step-icon {
+  border-color: var(--ac-success);
+  background: var(--ac-success);
+  color: var(--ac-surface);
+  animation: ac-check-pop 350ms ease both;
+}
+
+.ac-spin {
+  animation: ac-rotate 1s linear infinite;
+}
+
+/* Tabrik */
+
+.ac-celebration {
+  min-height: 520px;
+  background:
+    radial-gradient(
+      circle at center,
+      var(--ac-primary-light),
+      var(--ac-surface) 75%
+    );
+}
+
+.ac-success-icon {
+  width: 112px;
+  height: 112px;
+  border-color: var(--ac-success-border);
+  border-radius: 50%;
+  background: var(--ac-success-soft);
+  box-shadow: 0 0 0 12px var(--ac-surface);
+  color: var(--ac-success);
+  animation: ac-success-enter 650ms
+    cubic-bezier(0.2, 0.8, 0.2, 1.3) both;
+}
+
+.ac-celebration h2 {
+  margin-top: 30px;
+  color: var(--ac-primary);
+  font-size: var(--ac-fs-success);
+  animation: ac-rise 550ms 100ms ease both;
+}
+
+.ac-celebration .ac-description {
+  animation: ac-rise 550ms 200ms ease both;
+}
+
+.ac-sparkle {
+  position: relative;
+  z-index: 2;
+  color: var(--ac-confetti-2);
+  animation: ac-sparkle-pulse 800ms ease-in-out infinite alternate;
+}
+
+/* Ikki tomondan otiladigan konfetti */
+
+.ac-confetti {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ac-confetti i {
+  position: absolute;
+  top: 56%;
+  left: 0;
+  width: 10px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--piece-color);
+  opacity: 0;
+  animation:
+    ac-burst-left
+    var(--piece-duration)
+    var(--piece-delay)
+    ease-out
+    both;
+}
+
+.ac-confetti i:nth-child(even) {
+  right: 0;
+  left: auto;
+  animation-name: ac-burst-right;
+}
+
+.ac-confetti i:nth-child(3n) {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.ac-confetti i:nth-child(5n) {
+  width: 6px;
+  height: 19px;
+}
+
+/* Sertifikat: ixcham, A4 nisbatida */
+
+.ac-document-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--ac-surface);
+}
+
+.ac-pdf {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 210 / 297;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ac-surface);
+}
+
+.ac-download-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 6px 6px;
+}
+
+.ac-download-row .ac-button {
+  width: 100%;
+}
+
+/* Xatolik */
+
+.ac-error {
+  max-width: 100%;
+  margin: 12px 0 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--ac-error-bg);
+  color: var(--ac-error);
+  font-size: var(--ac-fs-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* Animatsiyalar */
+
+@keyframes ac-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ac-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ac-gentle-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes ac-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ac-check-pop {
+  0% {
+    transform: scale(0.7);
+  }
+
+  65% {
+    transform: scale(1.12);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes ac-success-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.5) rotate(-14deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes ac-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ac-sparkle-pulse {
+  from {
+    transform: scale(0.9) rotate(-8deg);
+  }
+
+  to {
+    transform: scale(1.15) rotate(8deg);
+  }
+}
+
+@keyframes ac-burst-left {
+  0% {
+    opacity: 0;
+    transform: translate3d(-12px, 0, 0) rotate(0);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  48% {
+    opacity: 1;
+    transform:
+      translate3d(
+        calc(130px + var(--piece-drift)),
+        -190px,
+        0
+      )
+      rotate(var(--piece-turn));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        calc(220px + var(--piece-drift)),
+        290px,
+        0
+      )
+      rotate(calc(var(--piece-turn) + 180deg));
+  }
+}
+
+@keyframes ac-burst-right {
+  0% {
+    opacity: 0;
+    transform: translate3d(12px, 0, 0) rotate(0);
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  48% {
+    opacity: 1;
+    transform:
+      translate3d(
+        calc(-130px - var(--piece-drift)),
+        -190px,
+        0
+      )
+      rotate(var(--piece-turn));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(
+        calc(-220px - var(--piece-drift)),
+        290px,
+        0
+      )
+      rotate(calc(var(--piece-turn) + 180deg));
+  }
+}
+
+/* Telefon */
+
+@media (max-width: 600px) {
+  .ac-heading {
+    margin-bottom: 18px;
+  }
+
+  .ac-card {
+    border-radius: 18px;
+  }
+
+  .ac-stage {
+    min-height: 420px;
+    padding: 34px 18px;
+  }
+
+  .ac-stage h2 {
+    letter-spacing: -0.4px;
+  }
+
+  .ac-description {
+    line-height: 1.6;
+  }
+
+  .ac-orbit {
+    width: 86px;
+    height: 86px;
+  }
+
+  .ac-button {
+    width: 100%;
+    padding-inline: 14px;
+  }
+
+  .ac-checklist {
+    gap: 8px;
+  }
+
+  .ac-step {
+    gap: 10px;
+    padding: 12px 10px;
+  }
+
+  .ac-step.is-current {
+    transform: none;
+  }
+
+  .ac-progress-caption {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .ac-progress-caption span {
+    max-width: 80%;
+  }
+
+  .ac-celebration {
+    min-height: 440px;
+  }
+
+  .ac-document-card {
+    max-width: 100%;
+    padding: 5px;
+    border-radius: 14px;
+  }
+
+  .ac-pdf {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 210 / 297;
+    border-radius: 8px;
+  }
+
+  .ac-download-row {
+    padding: 12px 5px 5px;
+  }
+}
+
+/* Harakatni kamaytirish sozlamasi */
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-confetti {
+    display: none;
+  }
+
+  .ac-card,
+  .ac-orbit > svg,
+  .ac-orbit-ring,
+  .ac-orbit::after,
+  .ac-progress > span::after,
+  .ac-spin,
+  .ac-step.is-done .ac-step-icon,
+  .ac-success-icon,
+  .ac-celebration h2,
+  .ac-celebration .ac-description,
+  .ac-sparkle {
+    animation: none;
+  }
+
+  .ac-button,
+  .ac-progress > span,
+  .ac-step {
+    transition: none;
+  }
 }

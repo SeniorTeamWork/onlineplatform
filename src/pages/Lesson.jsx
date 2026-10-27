@@ -1,249 +1,753 @@
-import { cloudEnabled, mediaUrl } from '../services/cloud';
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { PlayCircle } from "lucide-react";
+import { PlayCircle, Lock, Check, Play } from "lucide-react";
+
 import { useApp } from "../context/AppContext";
-import { getFile, putFile, uid, unlocked, attemptPassed, recordAttempt, submitPractice, downloadMaterial } from "../services/db";
+import { cloudEnabled, mediaUrl } from "../services/cloud";
+
+import {
+  getFile,
+  putFile,
+  uid,
+  unlocked,
+  recordAttempt,
+  submitPractice,
+  downloadMaterial,
+  completed,
+} from "../services/db";
+
 import "./Lesson.css";
-function Player({
-  lesson,
-  onEnd,
-  watermark
-}) {
-  const [src, setSrc] = useState("");
-  const [error, setError] = useState("");
+
+function Player({ lesson, onEnd, watermark }) {
+  const fileId =
+    typeof lesson.fileId === "string" ? lesson.fileId.trim() : "";
+
+  const videoUrl =
+    typeof lesson.video === "string" ? lesson.video.trim() : "";
+
+  const sourceKey = JSON.stringify([lesson.id, fileId, videoUrl]);
+
+  const [media, setMedia] = useState({
+    key: "",
+    src: "",
+    error: "",
+  });
+
   useEffect(() => {
-    let active = true,
-      objectUrl;
-    setSrc("");
-    setError("");
-    if (lesson.fileId) {
-      (cloudEnabled ? mediaUrl(lesson.fileId) : getFile(lesson.fileId)).then(file => {
-        if (!active) return;
-        if (!file) {
-          setError("Video bu brauzerda topilmadi. Admin videoni qayta yuklashi kerak.");
-          return;
+    let active = true;
+    let objectUrl;
+
+    setMedia({
+      key: sourceKey,
+      src: "",
+      error: "",
+    });
+
+    async function load() {
+      try {
+        if (!fileId && !videoUrl) return;
+
+        let src = videoUrl;
+
+        if (fileId) {
+          const file = await (
+            cloudEnabled ? mediaUrl(fileId) : getFile(fileId)
+          );
+
+          if (!active) return;
+          if (!file) throw Error("Video fayli topilmadi.");
+
+          if (cloudEnabled) {
+            src = file;
+          } else {
+            objectUrl = URL.createObjectURL(file);
+            src = objectUrl;
+          }
         }
-        if (cloudEnabled) {
-          setSrc(file);
-          return;
+
+        if (active) {
+          setMedia({
+            key: sourceKey,
+            src,
+            error: "",
+          });
         }
-        objectUrl = URL.createObjectURL(file);
-        setSrc(objectUrl);
-      }).catch(() => active && setError("Video faylini ochib bo‘lmadi."));
-    } else setSrc(lesson.video);
+      } catch (error) {
+        if (active) {
+          setMedia({
+            key: sourceKey,
+            src: "",
+            error: error.message || "Video ochilmadi.",
+          });
+        }
+      }
+    }
+
+    load();
+
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [lesson.fileId, lesson.video]);
-  return src && !error ? <div className="protected-video" onContextMenu={e => e.preventDefault()}>
+  }, [sourceKey, fileId, videoUrl]);
+
+  const current =
+    media.key === sourceKey ? media : { src: "", error: "" };
+
+  const hasVideo = Boolean(fileId || videoUrl);
+
+  if (!hasVideo || !current.src || current.error) {
+    return (
+      <div className="video-empty">
+        <PlayCircle size={52} />
+
+        <h3>
+          {!hasVideo
+            ? "Video hali yuklanmagan"
+            : current.error
+              ? "Video ochilmadi"
+              : "Video yuklanmoqda…"}
+        </h3>
+
+        <p>
+          {!hasVideo
+            ? "Ushbu darsga video joylashtirilgach, shu yerda ko‘rinadi."
+            : current.error || "Iltimos, kuting."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="protected-video"
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <div className="video-watermark">{watermark}</div>
-      <video className="video" controls controlsList="nodownload noremoteplayback" disablePictureInPicture disableRemotePlayback playsInline onEnded={onEnd} onError={() => setError("Video ochilmadi. Manzil va formatni tekshiring.")} src={src} />
-    </div> : <div className="video-empty">
-      <PlayCircle size={52} />
-      <h3>Bilim sari birinchi qadam</h3>
-      <p>{error || "Admin ushbu dars videosini hali yuklamagan."}</p>
-      <small>Video yuklangach, shu yerda tomosha qilasiz.</small>
-    </div>;
+
+      <video
+        key={sourceKey}
+        className="video"
+        src={current.src}
+        controls
+        controlsList="nodownload noremoteplayback"
+        disablePictureInPicture
+        disableRemotePlayback
+        playsInline
+        preload="metadata"
+        onEnded={onEnd}
+        onError={() =>
+          setMedia({
+            key: sourceKey,
+            src: "",
+            error: "Video ochilmadi. Manzil va formatni tekshiring.",
+          })
+        }
+      />
+    </div>
+  );
 }
+
 export default function Lesson() {
-  const {
-    id
-  } = useParams();
+  const { id } = useParams();
+
   return <LessonContent key={id} id={id} />;
 }
-function LessonContent({
-  id
-}) {
+
+function LessonContent({ id }) {
   const {
     data,
     user,
     update,
-    notify
+    notify,
+    cloud,
+    command,
   } = useApp();
-  const [tab, setTab] = useState("test"),
-    [answer, setAnswer] = useState(""),
-    [attachment, setAttachment] = useState(null),
-    [busy, setBusy] = useState(false);
+
+  const [tab, setTab] = useState("test");
+  const [answer, setAnswer] = useState("");
+  const [attachment, setAttachment] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [testAnswers, setTestAnswers] = useState({});
+
   const submitting = useRef(false);
-  const lesson = data.lessons.find(l => l.id === id);
-  if (!lesson || !unlocked(data, user.id, id)) return <div className="empty">
-        Dars yopiq yoki mavjud emas. <Link to="/student">Kurslarim</Link>
-      </div>; 
-  const key = user.id + ":" + id,
-    session = data.testSessions[key];
-  const attempts = data.attempts.filter(a => a.userId === user.id && a.lessonId === id),
-    latest = attempts[attempts.length - 1],
-    practices = data.submissions.filter(s => s.userId === user.id && s.lessonId === id);
-  function start() {
-    update(d => {
-      if (d.testSessions[key]) return;
-      if (!lesson.questions.length) throw Error("Test mavjud emas.");
-      d.testSessions[key] = {
-        id: uid(),
-        userId: user.id,
-        lessonId: id,
-        courseId: lesson.courseId,
-        lessonTitle: lesson.title,
-        startedAt: new Date().toISOString(),
-        questions: structuredClone(lesson.questions),
-        answers: {}
-      };
-    });
+  const watching = useRef(false);
+
+  const lesson = data.lessons.find((item) => item.id === id);
+
+  if (!lesson || !unlocked(data, user.id, id)) {
+    return (
+      <div className="empty">
+        Dars yopiq yoki mavjud emas.{" "}
+        <Link to="/student/course">Kurslarim</Link>
+      </div>
+    );
   }
-  async function finish(e) {
-    e.preventDefault();
-    if (submitting.current) return;
-    submitting.current = true;
-    await update(d => recordAttempt(d, session, d.testSessions[key]?.answers || {}));
-    submitting.current = false;
-  }
-  async function practice(e) {
-    e.preventDefault();
+
+  const key = user.id + ":" + id;
+  const session = data.testSessions[key];
+
+  const attempts = data.attempts.filter(
+    (attempt) =>
+      attempt.userId === user.id &&
+      attempt.lessonId === id
+  );
+
+  const latest = attempts[attempts.length - 1];
+
+  const practices = data.submissions.filter(
+    (submission) =>
+      submission.userId === user.id &&
+      submission.lessonId === id
+  );
+
+  const courseLessons = data.lessons.filter(
+    (item) =>
+      item.courseId === lesson.courseId &&
+      item.published &&
+      !item.archived
+  );
+
+  const currentIndex = courseLessons.findIndex(
+    (item) => item.id === id
+  );
+
+  const nextLesson = courseLessons[currentIndex + 1];
+
+  async function start() {
     if (busy) return;
+
+    setTestAnswers({});
     setBusy(true);
+
     try {
-      let material;
-      if (attachment) {
-        if (!/\.(pdf|xlsx?|png|jpe?g)$/i.test(attachment.name) || attachment.size > 20 * 1024 * 1024) throw Error("PDF, Excel yoki rasm tanlang (20 MB gacha).");
-        material = {
-          fileId: await putFile(attachment),
-          name: attachment.name
+      await update((draft) => {
+        if (draft.testSessions[key]) return;
+
+        if (!lesson.questions.length) {
+          throw Error("Test mavjud emas.");
+        }
+
+        draft.testSessions[key] = {
+          id: uid(),
+          userId: user.id,
+          lessonId: id,
+          courseId: lesson.courseId,
+          lessonTitle: lesson.title,
+          startedAt: new Date().toISOString(),
+          questions: structuredClone(lesson.questions),
+          answers: {},
         };
-      }
-      if (await update(d => submitPractice(d, {
-        id: uid(),
-        userId: user.id,
-        courseId: lesson.courseId,
-        lessonId: id,
-        lessonTitle: lesson.title,
-        answer,
-        attachment: material
-      }))) {
-        setAnswer("");
-        setAttachment(null);
-        notify("Amaliy ish tarixga saqlandi.");
-      }
-    } catch (e) {
-      notify(e.message);
+      });
+    } catch (error) {
+      notify(error.message);
     } finally {
       setBusy(false);
     }
   }
-  async function download(m) {
+
+  async function finish(event) {
+    event.preventDefault();
+
+    if (submitting.current || !session) return;
+
+    submitting.current = true;
+    setBusy(true);
+
     try {
-      await downloadMaterial(m);
-    } catch (e) {
-      notify(e.message);
+      const answers = {
+        ...session.answers,
+        ...testAnswers,
+      };
+
+      if (cloud) {
+        await command("submitTest", {
+          lessonId: id,
+          sessionId: session.id,
+          answers,
+        });
+      } else {
+        await update((draft) => {
+          recordAttempt(draft, session, answers);
+        });
+      }
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      submitting.current = false;
+      setBusy(false);
     }
   }
-  return <>
-      <Link className="back" to={"/student/course/" + lesson.courseId}>
+
+  async function watched() {
+    if (
+      watching.current ||
+      data.progress[user.id]?.[id]?.watched
+    ) {
+      return;
+    }
+
+    watching.current = true;
+
+    try {
+      if (cloud) {
+        await command("watchLesson", {
+          lessonId: id,
+        });
+      } else {
+        await update((draft) => {
+          draft.progress[user.id] ??= {};
+
+          draft.progress[user.id][id] = {
+            watched: true,
+            watchedAt: new Date().toISOString(),
+          };
+        });
+      }
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      watching.current = false;
+    }
+  }
+
+  async function practice(event) {
+    event.preventDefault();
+
+    if (busy) return;
+
+    setBusy(true);
+
+    try {
+      let material;
+
+      if (attachment) {
+        if (
+          !/\.(pdf|xlsx?|png|jpe?g)$/i.test(attachment.name) ||
+          attachment.size > 20 * 1024 * 1024
+        ) {
+          throw Error(
+            "PDF, Excel yoki rasm tanlang (20 MB gacha)."
+          );
+        }
+
+        material = {
+          fileId: await putFile(attachment),
+          name: attachment.name,
+        };
+      }
+
+      const saved = await update((draft) => {
+        submitPractice(draft, {
+          id: uid(),
+          userId: user.id,
+          courseId: lesson.courseId,
+          lessonId: id,
+          lessonTitle: lesson.title,
+          answer,
+          attachment: material,
+        });
+      });
+
+      if (saved) {
+        setAnswer("");
+        setAttachment(null);
+        notify("Amaliy ish tarixga saqlandi.");
+      }
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download(material) {
+    try {
+      await downloadMaterial(material);
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
+  return (
+    <>
+      <Link
+        className="back"
+        to={"/student/course/" + lesson.courseId}
+      >
         ← Kursga qaytish
       </Link>
+
       <h1>{lesson.title}</h1>
-      {/* <p>{lesson.description}</p> */} <br />
-      <Player lesson={lesson} watermark={user.name + " · " + user.email} onEnd={() => update(d => {
-      d.progress[user.id] ??= {};
-      d.progress[user.id][id] = {
-        watched: true,
-        watchedAt: new Date().toISOString()
-      };
-    })} />
-      <p>
-        {data.progress[user.id]?.[id]?.watched ? "✓ Video yakunlangan" : " "}
-      </p>
-      <div className="tabs" role="tablist" aria-label="Dars bo‘limlari">
-        {[["test", "1. Test"], ["practice", "2. Amaliy"], ["materials", "3. Qo‘shimcha materiallar"]].map(([k, v]) => <button key={k} role="tab" aria-selected={tab === k} aria-controls={"panel-" + k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
-            {v}
-          </button>)}
+      <p>{lesson.description}</p>
+
+      <div className="lesson-media-grid">
+        <div className="lesson-main-video">
+          <Player
+            key={JSON.stringify([
+              lesson.id,
+              lesson.fileId,
+              lesson.video,
+            ])}
+            lesson={lesson}
+            watermark={
+              user.name + " · " + (user.username || user.id)
+            }
+            onEnd={watched}
+          />
+
+          {(lesson.fileId || lesson.video) && (
+            <p>
+              {data.progress[user.id]?.[id]?.watched
+                ? "✓ Video yakunlangan"
+                : "Video oxirigacha ko‘rilgach holat saqlanadi."}
+            </p>
+          )}
+
+          {/* {nextLesson &&
+            unlocked(data, user.id, nextLesson.id) && (
+              <Link
+                className="primary"
+                to={"/student/lesson/" + nextLesson.id}
+              >
+                Keyingi dars →
+              </Link>
+            )} */}
+        </div>
+
+        <aside className="panel lesson-playlist">
+          <h2>Darslar ro‘yxati</h2>
+
+          <nav aria-label="Kurs darslari">
+            {courseLessons.map((item, index) => {
+              const open = unlocked(data, user.id, item.id);
+              const done = completed(data, user.id, item.id);
+
+              const content = (
+                <>
+                  <span>
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+
+                  <span className="playlist-title">
+                    {item.title}
+                  </span>
+
+                  {done ? (
+                    <Check size={18} />
+                  ) : open ? (
+                    <Play size={18} />
+                  ) : (
+                    <Lock size={18} />
+                  )}
+                </>
+              );
+
+              return open ? (
+                <Link
+                  key={item.id}
+                  className={
+                    "playlist-item" +
+                    (item.id === id ? " current" : "")
+                  }
+                  aria-current={
+                    item.id === id ? "page" : undefined
+                  }
+                  to={"/student/lesson/" + item.id}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div
+                  key={item.id}
+                  className="playlist-item locked"
+                  aria-disabled="true"
+                >
+                  {content}
+                </div>
+              );
+            })}
+          </nav>
+
+          <p className="muted">
+            Test bali darslarni ochishga ta’sir qilmaydi.
+            Natijalar sertifikat uchun hisoblanadi.
+          </p>
+        </aside>
       </div>
-      <section className="panel task-panel" role="tabpanel" id={"panel-" + tab}>
-        {tab === "test" ? <>
+
+      <div
+        className="tabs"
+        role="tablist"
+        aria-label="Dars bo‘limlari"
+      >
+        {[
+          ["test", "1. Test"],
+          ["practice", "2. Amaliy"],
+          ["materials", "3. Qo‘shimcha materiallar"],
+        ].map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            role="tab"
+            aria-selected={tab === value}
+            aria-controls={"panel-" + value}
+            className={tab === value ? "active" : ""}
+            onClick={() => setTab(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <section
+        className="panel task-panel"
+        role="tabpanel"
+        id={"panel-" + tab}
+      >
+        {tab === "test" ? (
+          <>
             <h2>Bilimingizni tekshiring</h2>
-            {/* <p>
-              O‘tish sharti: 70% dan yuqori. Natijalar tahrirlanmaydi; qayta
-              urinish boshidan boshlanadi.
-            </p> */}
-            {session ? <form onSubmit={finish}>
-                {session.questions.map((q, i) => <fieldset key={q.id}>
+
+           <br />
+
+            {session ? (
+              <form onSubmit={finish}>
+                {session.questions.map((question, index) => (
+                  <fieldset key={question.id}>
+                    
                     <legend>
-                      {i + 1}. {q.text}
+                      {index + 1}. {question.text}
                     </legend>
-                    {q.options.map((o, j) => <label className="test-option" key={j}>
-                        <input type="radio" name={q.id} required checked={session.answers[q.id] === j} onChange={() => update(d => {
-                if (d.testSessions[key]?.id === session.id) d.testSessions[key].answers[q.id] = j;
-              })} />
-                        {o}
-                      </label>)}
-                  </fieldset>)}
-                <button className="primary">Testni topshirish</button>
-              </form> : <>
-                {latest && <p className="result">
-                    Oxirgi natija: {latest.score.toFixed(2)}% ·{" "}
-                    {attemptPassed(latest) ? "O‘tdingiz" : "O‘tmadingiz"}
-                  </p>}
-                <button className="primary" disabled={!lesson.questions.length} onClick={start}>
-                  {latest ? "Testni boshidan boshlash" : "Testni boshlash"}
+
+                    {question.options.map((option, optionIndex) => (
+                      <label
+                        className="test-option"
+                        key={optionIndex}
+                      >
+                        <input
+                          type="radio"
+                          name={question.id}
+                          required
+                          disabled={busy}
+                          checked={
+                            (
+                              testAnswers[question.id] ??
+                              session.answers[question.id]
+                            ) === optionIndex
+                          }
+                          onChange={() => {
+                            setTestAnswers((previous) => ({
+                              ...previous,
+                              [question.id]: optionIndex,
+                            }));
+
+                            update((draft) => {
+                              if (
+                                draft.testSessions[key]?.id ===
+                                session.id
+                              ) {
+                                draft.testSessions[key].answers[
+                                  question.id
+                                ] = optionIndex;
+                              }
+                            });
+                          }}
+                        />
+
+                        {option}
+                      </label>
+                    ))}
+                  </fieldset>
+                ))}
+
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={busy}
+                >
+                  {busy
+                    ? "Saqlanmoqda…"
+                    : "Testni topshirish"}
                 </button>
-              </>}
+              </form>
+            ) : (
+              <>
+                {latest && (
+                  <p className="result">
+                    Oxirgi natija:{" "}
+                    {Number(latest.score).toFixed(2)}%
+                    {" · "}
+                    Test yakunlandi
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || !lesson.questions.length}
+                  onClick={start}
+                >
+                  {latest
+                    ? "Testni boshidan boshlash"
+                    : "Testni boshlash"}
+                </button>
+              </>
+            )}
+
             <h3>Test tarixi</h3>
-            {[...attempts].reverse().map(a => <details key={a.id} className="attempt-detail">
+
+            {[...attempts].reverse().map((attempt) => (
+              <details
+                key={attempt.id}
+                className="attempt-detail"
+              >
                 <summary>
-                  {a.score.toFixed(2)}% ·{" "}
-                  {new Date(a.createdAt).toLocaleString("uz-UZ")}
+                  {Number(attempt.score).toFixed(2)}%
+                  {" · "}
+                  {new Date(attempt.createdAt).toLocaleString(
+                    "uz-UZ"
+                  )}
                 </summary>
-                {a.questions?.map(q => <p key={q.id}>
-                    {q.text}
+
+                {attempt.questions?.map((question) => (
+                  <p key={question.id}>
+                    {question.text}
                     <br />
-                    Javobingiz: {q.options[a.answers?.[q.id]] ?? "—"}
-                  </p>)}
-              </details>)}
-          </> : tab === "practice" ? <>
+                    Javobingiz:{" "}
+                    {question.options[
+                      attempt.answers?.[question.id]
+                    ] ?? "—"}
+                  </p>
+                ))}
+              </details>
+            ))}
+          </>
+        ) : tab === "practice" ? (
+          <>
             <h2>Amaliy topshiriq</h2>
             <p>{lesson.task}</p>
-            {practices.some(s => s.status === "pending") ? <p className="badge">Yuborilgan ish tekshirilmoqda.</p> : <form onSubmit={practice}>
+
+            {practices.some(
+              (submission) => submission.status === "pending"
+            ) ? (
+              <p className="badge">
+                Yuborilgan ish tekshirilmoqda.
+              </p>
+            ) : (
+              <form onSubmit={practice}>
                 <label>
                   Javobingiz
-                  <textarea required minLength={5} maxLength={10000} value={answer} onChange={e => setAnswer(e.target.value)} />
+                  <textarea
+                    required
+                    minLength={5}
+                    maxLength={10000}
+                    value={answer}
+                    onChange={(event) =>
+                      setAnswer(event.target.value)
+                    }
+                  />
                 </label>
+
                 <label>
                   Ilova (ixtiyoriy, 20 MB gacha)
-                  <input key={attachment?.name || "empty"} type="file" accept=".pdf,.xls,.xlsx,.png,.jpg,.jpeg" onChange={e => setAttachment(e.target.files[0] || null)} />
+                  <input
+                    key={attachment?.name || "empty"}
+                    type="file"
+                    accept=".pdf,.xls,.xlsx,.png,.jpg,.jpeg"
+                    onChange={(event) =>
+                      setAttachment(
+                        event.target.files[0] || null
+                      )
+                    }
+                  />
                 </label>
-                <button className="primary" disabled={busy}>
-                  {busy ? "Saqlanmoqda…" : "Amaliy ishni topshirish"}
+
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={busy}
+                >
+                  {busy
+                    ? "Saqlanmoqda…"
+                    : "Amaliy ishni topshirish"}
                 </button>
-              </form>}
+              </form>
+            )}
+
             <h3>Amaliy ishlar tarixi</h3>
-            {[...practices].reverse().map(s => <article className="submission" key={s.id}>
-                <p>{s.answer}</p>
-                {s.attachment && <button className="secondary" onClick={() => download(s.attachment)}>
-                    {s.attachment.name} ↓
-                  </button>}
-                <p>{new Date(s.createdAt).toLocaleString("uz-UZ")}</p>
+
+            {[...practices].reverse().map((submission) => (
+              <article
+                className="submission"
+                key={submission.id}
+              >
+                <p>{submission.answer}</p>
+
+                {submission.attachment && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      download(submission.attachment)
+                    }
+                  >
+                    {submission.attachment.name} ↓
+                  </button>
+                )}
+
+                <p>
+                  {new Date(
+                    submission.createdAt
+                  ).toLocaleString("uz-UZ")}
+                </p>
+
                 <strong>
-                  {{
-              pending: "Tekshirilmoqda",
-              approved: "Tasdiqlangan",
-              rejected: "Qaytarilgan"
-            }[s.status]}
+                  {
+                    {
+                      pending: "Tekshirilmoqda",
+                      approved: "Tasdiqlangan",
+                      rejected: "Qaytarilgan",
+                    }[submission.status]
+                  }
                 </strong>
-                <p>Baho: {s.grade ?? "—"} / 100</p>
-                <p>{s.feedback}</p>
-              </article>)}
-          </> : <>
+
+                <p>Baho: {submission.grade ?? "—"} / 100</p>
+                <p>{submission.feedback}</p>
+              </article>
+            ))}
+          </>
+        ) : (
+          <>
             <h2>Qo‘shimcha materiallar</h2>
             <p>Dars uchun PDF va Excel fayllar.</p>
-            {(lesson.materials || []).map(m => <div className="material-row" key={m.fileId}>
-                <span>{m.name}</span>
-                <button className="secondary" onClick={() => download(m)}>
+
+            {(lesson.materials || []).map((material) => (
+              <div
+                className="material-row"
+                key={material.fileId}
+              >
+                <span>{material.name}</span>
+
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => download(material)}
+                >
                   Yuklab olish ↓
                 </button>
-              </div>)}
-            {!lesson.materials?.length && <p>Hozircha material yuklanmagan.</p>}
-          </>}
+              </div>
+            ))}
+
+            {!lesson.materials?.length && (
+              <p>Hozircha material yuklanmagan.</p>
+            )}
+          </>
+        )}
       </section>
-    </>;
+    </>
+  );
 }

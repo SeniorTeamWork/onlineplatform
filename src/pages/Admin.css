@@ -53,3 +53,165 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+:root {
+  --finance-debt-color: #dc2626;
+  --finance-debt-background: #fff1f2;
+
+  --finance-paid-color: #15803d;
+  --finance-paid-background: #ecfdf3;
+}
+
+.finance-amount {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.finance-amount--debt {
+  color: var(--finance-debt-color);
+  background-color: var(--finance-debt-background);
+}
+
+.finance-amount--paid {
+  color: var(--finance-paid-color);
+  background-color: var(--finance-paid-background);
+}
+
+
+
+.lesson-close-fixed {
+  position: fixed !important;
+  top: 0px !important;
+  right: 350px !important;
+  z-index: 999;
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  padding: 0;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  /* background-color: red !important; */
+  color: var(--primary, #080acd);
+  font-size: 30px;
+  line-height: 1;
+  /* box-shadow: var(--shadow); */
+}
+
+.lesson-questions-toolbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 110;
+  padding: 0px 0;
+  background: var(--surface, #fff);
+  background-color: red;
+}
+
+.lesson-question-fixed {
+  position: sticky !important;
+  width: auto;
+  min-height: 46px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--primary, #080acd);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+
+.modal {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+}
+
+.modal::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.modal.lesson-editor-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.lesson-editor-modal .lesson-editor-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lesson-editor-modal .lesson-editor-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.lesson-editor-modal #edit-title {
+  padding-right: 44px;
+}
+
+.lesson-editor-modal .lesson-close-fixed {
+  position: absolute !important;
+  top: 0px !important;
+  right: 0px !important;
+  bottom: auto !important;
+  left: auto !important;
+  z-index: 120;
+
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+
+  background: var(--surface, #fff);
+  color: var(--primary, #080acd);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.lesson-editor-modal .lesson-question-fixed {
+  position: sticky !important;
+  top: -20px !important;
+  right: 0px !important;
+  bottom: auto !important;
+  left: auto !important;
+  z-index: 110;
+
+  display: block;
+  width: max-content;
+  min-height: 46px;
+  margin: 0 48px 16px auto;
+  padding: 5px 20px;
+  border: 0;
+  border-radius: 12px;
+
+  background: var(--primary, #080acd);
+  color: var(--surface, #fff);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 600px) {
+  .lesson-editor-modal .lesson-editor-scroll {
+    padding: 20px 16px;
+  }
+}

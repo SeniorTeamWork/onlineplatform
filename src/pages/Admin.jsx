@@ -7,6 +7,8 @@ import { useApp } from "../context/AppContext";
 import {
   paymentSummary,
   enrollmentSummary,
+  enrollmentsFor,
+  accessState,
   money,
 } from "../services/db";
 
@@ -14,8 +16,6 @@ import {
   fullyPaidStudent,
   trialEnrollments,
 } from "../services/adminOverview";
-
-import useFiveStudentScroll from "../hooks/useFiveStudentScroll";
 
 import Statistics from "../components/Statistics";
 import StudentOverviewTable from "../components/StudentOverviewTable";
@@ -25,38 +25,20 @@ import PaymentForm from "../components/PaymentForm";
 import "./Admin.css";
 
 export default function Admin() {
-  const {
-    data,
-    user,
-    notify,
-  } = useApp();
+  const { data, user, notify } = useApp();
 
-  const [paymentOpen, setPaymentOpen] =
-    useState(false);
-
-  const [trialName, setTrialName] =
-    useState("");
-
-  const [trialCourse, setTrialCourse] =
-    useState("");
-
-  const [studentName, setStudentName] =
-    useState("");
-
-  const [studentCourse, setStudentCourse] =
-    useState("");
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [studentFilter, setStudentFilter] = useState("all");
+  const [studentName, setStudentName] = useState("");
+  const [studentCourse, setStudentCourse] = useState("");
 
   const students = data.users.filter(
-    (student) =>
-      student.role === "student"
+    (student) => student.role === "student"
   );
 
   const totals = students.reduce(
     (result, student) => {
-      const summary = paymentSummary(
-        data,
-        student
-      );
+      const summary = paymentSummary(data, student);
 
       result.fee += summary.fee;
       result.paid += summary.paid;
@@ -75,84 +57,80 @@ export default function Admin() {
 
   const unseen = trials.filter(
     (enrollment) =>
-      !(user.trialSeenIds || []).includes(
-        enrollment.id
-      )
+      !(user.trialSeenIds || []).includes(enrollment.id)
   );
 
   const unseenCount = new Set(
-    unseen.map(
-      (enrollment) =>
-        enrollment.userId
-    )
+    unseen.map((enrollment) => enrollment.userId)
   ).size;
 
-  const activeCount = students.filter(
-    (student) =>
-      fullyPaidStudent(data, student)
+  const activeCount = students.filter((student) =>
+    fullyPaidStudent(data, student)
   ).length;
 
   const trialCount = new Set(
-    trials.map(
-      (enrollment) =>
-        enrollment.userId
-    )
+    trials.map((enrollment) => enrollment.userId)
   ).size;
 
-  const trialRows = students
-    .filter((student) =>
-      student.name
-        .toLowerCase()
-        .includes(
-          trialName.trim().toLowerCase()
-        )
-    )
-    .map((student) => ({
-      student,
+  const filteredStudents = students.filter((student) => {
+    const matchesName = String(student.name || "")
+      .toLowerCase()
+      .includes(studentName.trim().toLowerCase());
 
-      enrollments: trials.filter(
+    const matchesCourse =
+      !studentCourse ||
+      data.enrollments.some(
         (enrollment) =>
           enrollment.userId === student.id &&
-          (
-            !trialCourse ||
-            enrollment.courseId === trialCourse
-          )
-      ),
-    }))
-    .filter(
-      (row) =>
-        row.enrollments.length > 0
-    );
+          enrollment.courseId === studentCourse
+      );
 
-  const filteredStudents = students.filter(
-    (student) =>
-      student.name
-        .toLowerCase()
-        .includes(
-          studentName.trim().toLowerCase()
-        ) &&
-      (
-        !studentCourse ||
-        data.enrollments.some(
-          (enrollment) =>
-            enrollment.userId === student.id &&
-            enrollment.courseId === studentCourse
-        )
-      )
-  );
+    if (!matchesName || !matchesCourse) {
+      return false;
+    }
 
-  const trialRowKey = JSON.stringify(
-    trialRows.map((row) => [
-      row.student.id,
+    if (studentFilter === "all") {
+      return true;
+    }
 
-      row.enrollments.map(
-        (enrollment) => enrollment.id
-      ),
-    ])
-  );
+    const summary = paymentSummary(data, student);
 
-  const trialRef =
-    useFiveStudentScroll(trialRowKey);
+    if (studentFilter === "payments") {
+      return summary.paid > 0;
+    }
+
+    if (studentFilter === "unpaid") {
+      return summary.paid === 0;
+    }
+
+    if (studentFilter === "debtors") {
+      return summary.debt > 0;
+    }
+
+    if (studentFilter === "paid") {
+      return fullyPaidStudent(data, student);
+    }
+
+    if (studentFilter === "trial") {
+      return enrollmentsFor(data, student.id).some(
+        (enrollment) => {
+          const state = accessState(data, enrollment);
+
+          const balance = enrollmentSummary(
+            data,
+            enrollment
+          );
+
+          return (
+            balance.debt > 0 &&
+            (state === "trial" || state === "deposit")
+          );
+        }
+      );
+    }
+
+    return true;
+  });
 
   const cards = [
     [
@@ -194,8 +172,8 @@ export default function Admin() {
           <h1>Umumiy ko‘rinish</h1>
 
           <p>
-            Ta’lim jarayoni va o‘quvchilar
-            natijalari bir joyda.
+            Ta’lim jarayoni va o‘quvchilar natijalari
+            bir joyda.
           </p>
         </div>
 
@@ -203,9 +181,7 @@ export default function Admin() {
           <button
             type="button"
             className="primary"
-            onClick={() =>
-              setPaymentOpen(true)
-            }
+            onClick={() => setPaymentOpen(true)}
           >
             <Wallet size={22} />
             To‘lov qo‘shish
@@ -214,188 +190,32 @@ export default function Admin() {
       </div>
 
       <div className="stats">
-        {cards.map(
-          ([number, title, to]) => (
-            <Link
-              className="panel stat"
-              key={title}
-              to={to}
-            >
-              <strong style={{fontSize: '30px'}} >{number}</strong>
+        {cards.map(([number, title, to]) => (
+          <Link
+            className="panel stat"
+            key={title}
+            to={to}
+          >
+            <strong style={{ fontSize: "30px" }}>
+              {number}
+            </strong>
 
-              <span>{title} →</span>
+            <span>{title} →</span>
 
-              {title ===
-                "Sinovdagi talabalar" &&
-                unseenCount > 0 && (
-                  <span
-                    className="badge"
-                    role="status"
-                  >
-                    🔔 {unseenCount} ta
-                    yangi talaba
-                  </span>
-                )}
-            </Link>
-          )
-        )}
+            {title === "Sinovdagi talabalar" &&
+              unseenCount > 0 && (
+                <span
+                  className="badge"
+                  role="status"
+                >
+                  🔔 {unseenCount} ta yangi talaba
+                </span>
+              )}
+          </Link>
+        ))}
       </div>
 
       <Statistics />
-
-      <section
-        id="trials"
-        className="panel detail-panel"
-      >
-        <h2>Sinovdagi talabalar</h2>
-
-        <div className="overview-filters">
-          <label>
-            Ism bo‘yicha
-
-            <input
-              type="search"
-              placeholder="Talaba ismini kiriting"
-              value={trialName}
-              onChange={(event) =>
-                setTrialName(
-                  event.target.value
-                )
-              }
-            />
-          </label>
-
-          <label>
-            Kurs bo‘yicha
-
-            <select
-              value={trialCourse}
-              onChange={(event) =>
-                setTrialCourse(
-                  event.target.value
-                )
-              }
-            >
-              <option value="">
-                Barcha kurslar
-              </option>
-
-              {data.courses.map(
-                (course) => (
-                  <option
-                    key={course.id}
-                    value={course.id}
-                  >
-                    {course.title}
-                  </option>
-                )
-              )}
-            </select>
-          </label>
-        </div>
-
-        <div
-          className="table-scroll five-student-scroll"
-          ref={trialRef}
-        >
-          <table>
-            <thead>
-              <tr>
-                <th>Talaba</th>
-                <th>Kurs</th>
-                <th>Holat</th>
-                <th>Qolgan qarz</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {trialRows.map(
-                ({
-                  student,
-                  enrollments,
-                }) => {
-                  const summaries =
-                    enrollments.map(
-                      (enrollment) =>
-                        enrollmentSummary(
-                          data,
-                          enrollment
-                        )
-                    );
-
-                  const deposit =
-                    student.accessMode ===
-                      "deposit" ||
-                    summaries.some(
-                      (summary) =>
-                        summary.paid > 0
-                    );
-
-                  const debt =
-                    summaries.reduce(
-                      (sum, summary) =>
-                        sum + summary.debt,
-                      0
-                    );
-
-                  const courseNames =
-                    enrollments
-                      .map(
-                        (enrollment) =>
-                          data.courses.find(
-                            (course) =>
-                              course.id ===
-                              enrollment.courseId
-                          )?.title ||
-                          "Nomsiz kurs"
-                      )
-                      .join(", ");
-
-                  return (
-                    <tr key={student.id}>
-                      <td>
-                        <Link
-                          className="purple"
-                          to={
-                            "/admin/students/" +
-                            student.id
-                          }
-                        >
-                          {student.name}
-                        </Link>
-                      </td>
-
-                      <td>
-                        {courseNames}
-                      </td>
-
-                      <td>
-                        {deposit
-                          ? "Depozit"
-                          : "Sinov"}
-                      </td>
-
-                      <td>
-                        {money(debt)}
-                      </td>
-                    </tr>
-                  );
-                }
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <br />
-
-        {!trialRows.length && (
-          <p>
-            {trials.length
-              ? "Filtrga mos talabalar topilmadi."
-              : "Sinovdagi talabalar yo‘q."}
-          </p>
-        )}
-      </section>
 
       <section className="panel detail-panel">
         <h2>Talabalar</h2>
@@ -404,6 +224,41 @@ export default function Admin() {
 
         <div className="overview-filters">
           <label>
+            Ro‘yxat
+
+            <select
+              value={studentFilter}
+              onChange={(event) =>
+                setStudentFilter(event.target.value)
+              }
+            >
+              <option value="all">
+                Barcha talabalar
+              </option>
+
+              <option value="payments">
+                To‘lov qilgan talabalar
+              </option>
+
+              <option value="unpaid">
+                To‘lov qilmagan talabalar
+              </option>
+
+              <option value="debtors">
+                Qarzdor talabalar
+              </option>
+
+              <option value="trial">
+                Sinovdagi talabalar
+              </option>
+
+              <option value="paid">
+                To‘liq to‘lagan faol talabalar
+              </option>
+            </select>
+          </label>
+
+          <label>
             Ism bo‘yicha
 
             <input
@@ -411,9 +266,7 @@ export default function Admin() {
               placeholder="Talaba ismini kiriting"
               value={studentName}
               onChange={(event) =>
-                setStudentName(
-                  event.target.value
-                )
+                setStudentName(event.target.value)
               }
             />
           </label>
@@ -424,25 +277,21 @@ export default function Admin() {
             <select
               value={studentCourse}
               onChange={(event) =>
-                setStudentCourse(
-                  event.target.value
-                )
+                setStudentCourse(event.target.value)
               }
             >
               <option value="">
                 Barcha kurslar
               </option>
 
-              {data.courses.map(
-                (course) => (
-                  <option
-                    key={course.id}
-                    value={course.id}
-                  >
-                    {course.title}
-                  </option>
-                )
-              )}
+              {data.courses.map((course) => (
+                <option
+                  key={course.id}
+                  value={course.id}
+                >
+                  {course.title}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -450,6 +299,7 @@ export default function Admin() {
         <StudentOverviewTable
           data={data}
           students={filteredStudents}
+          highlightPayments
           limitRows
         />
       </section>
@@ -457,9 +307,7 @@ export default function Admin() {
       {paymentOpen && (
         <Modal
           title="To‘lov qo‘shish"
-          onClose={() =>
-            setPaymentOpen(false)
-          }
+          onClose={() => setPaymentOpen(false)}
         >
           <PaymentForm
             onSaved={() => {

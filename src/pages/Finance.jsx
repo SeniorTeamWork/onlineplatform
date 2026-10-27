@@ -9,19 +9,30 @@ import {
   paymentSummary,
   enrollmentSummary,
   money,
-  localDate,
 } from "../services/db";
 
 import "./Admin.css";
+
+function amountClass(debt, fullyPaid) {
+  if (debt > 0) {
+    return "finance-amount finance-amount--debt";
+  }
+
+  if (fullyPaid) {
+    return "finance-amount finance-amount--paid";
+  }
+
+  return "";
+}
 
 export default function Finance() {
   const { data } = useApp();
 
   const [status, setStatus] = useState("all");
-  const [studentId, setStudentId] = useState("");
+  const [studentId] = useState("");
   const [query, setQuery] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from] = useState("");
+  const [to] = useState("");
 
   const students = data.users.filter(
     (user) => user.role === "student"
@@ -34,12 +45,7 @@ export default function Finance() {
 
   const totals = rows.reduce(
     (result, row) => {
-      for (const key of [
-        "fee",
-        "paid",
-        "debt",
-        "credit",
-      ]) {
+      for (const key of ["fee", "paid", "debt", "credit"]) {
         result[key] += row[key];
       }
 
@@ -71,8 +77,7 @@ export default function Finance() {
         .includes(query.trim().toLowerCase());
 
       const matchesStudent =
-        !studentId ||
-        row.student.id === studentId;
+        !studentId || row.student.id === studentId;
 
       const matchesStatus =
         status === "all" ||
@@ -93,9 +98,7 @@ export default function Finance() {
           (payment) =>
             payment.userId === row.student.id
         )
-        .sort((a, b) =>
-          b.date.localeCompare(a.date)
-        );
+        .sort((a, b) => b.date.localeCompare(a.date));
 
       return {
         ...row,
@@ -106,11 +109,6 @@ export default function Finance() {
         ),
       };
     });
-
-  const periodTotal = filtered.reduce(
-    (sum, row) => sum + row.periodPaid,
-    0
-  );
 
   return (
     <>
@@ -151,11 +149,7 @@ export default function Finance() {
           onClick={() => setStatus("debtors")}
         >
           <strong style={{ fontSize: "30px" }}>
-            {
-              rows.filter(
-                (row) => row.debt > 0
-              ).length
-            }
+            {rows.filter((row) => row.debt > 0).length}
           </strong>
 
           <span>Qarzdorlar →</span>
@@ -188,16 +182,37 @@ export default function Finance() {
 
             <tbody>
               {data.courses.map((course) => {
-                const enrollments =
-                  data.enrollments.filter(
-                    (enrollment) =>
-                      enrollment.courseId === course.id
-                  );
+                const enrollments = data.enrollments.filter(
+                  (enrollment) =>
+                    enrollment.courseId === course.id
+                );
 
                 const summaries = enrollments.map(
                   (enrollment) =>
                     enrollmentSummary(data, enrollment)
                 );
+
+                const coursePaid = summaries.reduce(
+                  (sum, summary) => sum + summary.paid,
+                  0
+                );
+
+                const courseDebt = summaries.reduce(
+                  (sum, summary) => sum + summary.debt,
+                  0
+                );
+
+                const courseFee = summaries.reduce(
+                  (sum, summary) =>
+                    sum + Number(summary.fee),
+                  0
+                );
+
+                const fullyPaid =
+                  enrollments.length > 0 &&
+                  courseFee > 0 &&
+                  courseDebt === 0 &&
+                  coursePaid >= courseFee;
 
                 return (
                   <tr key={course.id}>
@@ -206,23 +221,26 @@ export default function Finance() {
                     <td>{enrollments.length}</td>
 
                     <td>
-                      {money(
-                        summaries.reduce(
-                          (sum, summary) =>
-                            sum + summary.paid,
-                          0
-                        )
-                      )}
+                      <span
+                        className={
+                          fullyPaid
+                            ? "finance-amount finance-amount--paid"
+                            : ""
+                        }
+                      >
+                        {money(coursePaid)}
+                      </span>
                     </td>
 
                     <td>
-                      {money(
-                        summaries.reduce(
-                          (sum, summary) =>
-                            sum + summary.debt,
-                          0
-                        )
-                      )}
+                      <span
+                        className={amountClass(
+                          courseDebt,
+                          fullyPaid
+                        )}
+                      >
+                        {money(courseDebt)}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -233,12 +251,10 @@ export default function Finance() {
       </section>
 
       <section className="panel detail-panel">
-        <h2>Talabalar </h2>
+        <h2>Talabalar</h2>
 
         <div className="form-grid">
           <label>
-            Ro‘yxat
-
             <select
               value={status}
               onChange={(event) =>
@@ -260,35 +276,12 @@ export default function Finance() {
               <option value="debtors">
                 Qarzdor talabalar
               </option>
+
               <option value="trial">
                 Sinovdagi talabalar
               </option>
             </select>
           </label>
-
-          {/* <label>
-            Talabani tanlang
-
-            <select
-              value={studentId}
-              onChange={(event) =>
-                setStudentId(event.target.value)
-              }
-            >
-              <option value="">
-                Barcha talabalar
-              </option>
-
-              {students.map((student) => (
-                <option
-                  key={student.id}
-                  value={student.id}
-                >
-                  {student.name}
-                </option>
-              ))}
-            </select>
-          </label> */}
         </div>
 
         <input
@@ -300,40 +293,6 @@ export default function Finance() {
           }
         />
 
-        {/* <div className="form-grid">
-          <label>
-            Dan
-
-            <input
-              type="date"
-              max={to || localDate()}
-              value={from}
-              onChange={(event) =>
-                setFrom(event.target.value)
-              }
-            />
-          </label>
-
-          <label>
-            Gacha
-
-            <input
-              type="date"
-              min={from}
-              max={localDate()}
-              value={to}
-              onChange={(event) =>
-                setTo(event.target.value)
-              }
-            />
-          </label>
-        </div> */}
-
-        {/* <p>
-          Tanlangan davrdagi to‘lovlar:{" "}
-          <strong>{money(periodTotal)}</strong>
-        </p> */}
-
         <div className="table-scroll">
           <table>
             <thead>
@@ -343,85 +302,63 @@ export default function Finance() {
                 <th>Jami to‘lov</th>
                 <th>Davrdagi to‘lov</th>
                 <th>Qarz</th>
-                {/* <th>To‘lov tarixi</th> */}
               </tr>
             </thead>
 
             <tbody>
-              {filtered.map((row) => (
-                <tr key={row.student.id}>
-                  <td>
-                    <Link
-                      className="purple"
-                      to={
-                        "/admin/students/" +
-                        row.student.id
-                      }
-                    >
-                      {row.student.name} →
-                    </Link>
-                  </td>
+              {filtered.map((row) => {
+                const fullyPaid =
+                  row.fee > 0 &&
+                  row.debt === 0 &&
+                  row.paid >= row.fee;
 
-                  <td>{money(row.fee)}</td>
+                return (
+                  <tr key={row.student.id}>
+                    <td>
+                      <Link
+                        className="purple"
+                        to={
+                          "/admin/students/" +
+                          row.student.id
+                        }
+                      >
+                        {row.student.name} →
+                      </Link>
+                    </td>
 
-                  <td>{money(row.paid)}</td>
+                    <td>{money(row.fee)}</td>
 
-                  <td>{money(row.periodPaid)}</td>
-
-                  <td>{money(row.debt)}</td>
-
-                  {/* <td>
-                    {row.payments.length ? (
-                      <details>
-                        <summary>
-                          {row.payments.length} ta to‘lov
-                        </summary>
-
-                        {row.payments.map((payment) => (
-                          <div
-                            className="submission"
-                            key={payment.id}
-                          >
-                            <strong>
-                              {money(payment.amount)}
-                            </strong>
-
-                            <small>
-                              Sana: {payment.date}
-                            </small>
-
-                            <small>
-                              {
-                                data.courses.find(
-                                  (course) =>
-                                    course.id ===
-                                    payment.courseId
-                                )?.title
-                              }
-                            </small>
-
-                            <small>
-                              Usul: {payment.method}
-                            </small>
-                          </div>
-                        ))}
-                      </details>
-                    ) : (
-                      <span>
-                        {from || to
-                          ? "Bu davrda to‘lov yo‘q"
-                          : "To‘lov qilinmagan"}
+                    <td>
+                      <span
+                        className={
+                          fullyPaid
+                            ? "finance-amount finance-amount--paid"
+                            : ""
+                        }
+                      >
+                        {money(row.paid)}
                       </span>
-                    )}
-                  </td> */}
-                </tr>
-              ))}
+                    </td>
+
+                    <td>{money(row.periodPaid)}</td>
+
+                    <td>
+                      <span
+                        className={amountClass(
+                          row.debt,
+                          fullyPaid
+                        )}
+                      >
+                        {money(row.debt)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
-          {!filtered.length && (
-            <p>Natija yo‘q.</p>
-          )}
+          {!filtered.length && <p>Natija yo‘q.</p>}
         </div>
       </section>
     </>

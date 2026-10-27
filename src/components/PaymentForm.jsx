@@ -1,7 +1,6 @@
 import {
   useEffect,
   useId,
-  useRef,
   useState,
 } from "react";
 
@@ -14,14 +13,9 @@ import {
   addPayment,
   localDate,
   money,
-  integer,
 } from "../services/db";
 
-import "./PaymentForm.css";
-
-function formatAmount(value) {
-  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
+import { MoneyInput } from "./FormattedInputs";
 
 export default function PaymentForm({
   studentId,
@@ -31,65 +25,37 @@ export default function PaymentForm({
     data,
     user,
     update,
+    notify,
   } = useApp();
+
+  const listId = useId();
 
   const [selected, setSelected] = useState(
     studentId || ""
   );
 
-  const [course, setCourse] = useState("");
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [course, setCourse] = useState("");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const searchRef = useRef(null);
-  const listId = useId();
 
   useEffect(() => {
-    setSelected(studentId || "");
-    setCourse("");
-    setQuery("");
-    setOpen(false);
-    setAmount("");
-    setError("");
-  }, [studentId]);
-
-  useEffect(() => {
-    function closeOutside(event) {
-      if (
-        searchRef.current &&
-        !searchRef.current.contains(event.target)
-      ) {
-        setOpen(false);
-        setActiveIndex(-1);
-      }
+    if (studentId) {
+      setSelected(studentId);
+      setCourse("");
+      setAmount("");
     }
-
-    document.addEventListener(
-      "pointerdown",
-      closeOutside
-    );
-
-    return () => {
-      document.removeEventListener(
-        "pointerdown",
-        closeOutside
-      );
-    };
-  }, []);
+  }, [studentId]);
 
   const students = data.users.filter(
     (account) => account.role === "student"
   );
 
-  const filteredStudents = students.filter(
-    (student) =>
-      student.name
-        .toLowerCase()
-        .includes(query.trim().toLowerCase())
+  const matches = students.filter((student) =>
+    String(student.name || "")
+      .toLowerCase()
+      .includes(query.trim().toLowerCase())
   );
 
   const choices = enrollmentsFor(data, selected);
@@ -102,90 +68,12 @@ export default function PaymentForm({
     ? enrollmentSummary(data, enrollment).debt
     : 0;
 
-  const amountNumber = Number(amount || 0);
-
-  const amountError =
-    enrollment && amountNumber > debt
-      ? "Miqdor qolgan qarzdan oshmasligi kerak."
-      : "";
-
   function chooseStudent(student) {
     setSelected(student.id);
     setQuery(student.name);
-    setOpen(false);
-    setActiveIndex(-1);
-    setError("");
-
-    const hasSelectedCourse = enrollmentsFor(
-      data,
-      student.id
-    ).some(
-      (item) => item.courseId === course
-    );
-
-    if (!hasSelectedCourse) {
-      setCourse("");
-    }
-  }
-
-  function searchStudent(event) {
-    setQuery(event.target.value);
-    setSelected("");
-    setOpen(true);
-    setActiveIndex(-1);
-    setError("");
-  }
-
-  function handleSearchKey(event) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setOpen(true);
-
-      setActiveIndex((index) =>
-        Math.min(
-          index + 1,
-          filteredStudents.length - 1
-        )
-      );
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-
-      setActiveIndex((index) =>
-        Math.max(index - 1, 0)
-      );
-    } else if (
-      event.key === "Enter" &&
-      open
-    ) {
-      event.preventDefault();
-
-      const student =
-        filteredStudents[activeIndex];
-
-      if (student) {
-        chooseStudent(student);
-      }
-    } else if (event.key === "Escape") {
-      setOpen(false);
-      setActiveIndex(-1);
-    }
-  }
-
-  function changeAmount(event) {
-    const value = event.target.value;
-
-    // Nuqta, vergul va bo‘sh joy minglik ajratgich sifatida olinadi.
-    if (!/^[\d.,\s]*$/.test(value)) return;
-
-    const digits = value
-      .replace(/[.,\s]/g, "")
-      .replace(/^0+(?=\d)/, "");
-
-    if (digits.length > 13) return;
-
-    setAmount(digits);
-    setError("");
+    setCourse("");
+    setAmount("");
+    setSearchOpen(false);
   }
 
   async function save(event) {
@@ -193,10 +81,8 @@ export default function PaymentForm({
 
     if (busy) return;
 
-    setError("");
-
-    if (!selected || !enrollment) {
-      setError("Talaba va kursni tanlang.");
+    if (!selected) {
+      notify("Ro‘yxatdan talabani tanlang.");
       return;
     }
 
@@ -206,37 +92,27 @@ export default function PaymentForm({
     setBusy(true);
 
     try {
-      const value = integer(amount, 1);
-
-      if (value > debt) {
-        throw new Error(
-          "Miqdor qolgan qarzdan oshmasligi kerak."
-        );
-      }
-
-      const success = await update((next) =>
-        addPayment(next, {
+      const saved = await update((draft) =>
+        addPayment(draft, {
           id: uid(),
           userId: selected,
           courseId: course,
-          amount: value,
+          amount: fields.get("amount"),
           date: fields.get("date"),
           method: fields.get("method"),
-          note: String(
-            fields.get("note") || ""
-          ).trim(),
+          note: String(fields.get("note") || "").trim(),
           createdBy: user.id,
         })
       );
 
-      if (success) {
+      if (saved) {
         form.reset();
-        setAmount("");
         setCourse("");
+        setAmount("");
         onSaved?.();
       }
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      notify(error.message);
     } finally {
       setBusy(false);
     }
@@ -247,96 +123,82 @@ export default function PaymentForm({
       <div className="form-grid">
         {!studentId && (
           <div
-            className="payment-student-search"
-            ref={searchRef}
+            style={{ position: "relative" }}
             onBlur={(event) => {
               if (
                 !event.currentTarget.contains(
                   event.relatedTarget
                 )
               ) {
-                setOpen(false);
+                setSearchOpen(false);
               }
             }}
           >
-            <label htmlFor={listId + "-input"}>
+            <label>
               Talaba
+
+              <input
+                type="search"
+                required
+                autoComplete="off"
+                placeholder="Talaba ismini yozing"
+                value={query}
+                role="combobox"
+                aria-expanded={searchOpen}
+                aria-controls={listId}
+                aria-autocomplete="list"
+                onFocus={() => setSearchOpen(true)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setSelected("");
+                  setCourse("");
+                  setAmount("");
+                  setSearchOpen(true);
+                }}
+              />
             </label>
 
-            <input
-              id={listId + "-input"}
-              type="text"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={open}
-              aria-controls={listId}
-              aria-activedescendant={
-                open &&
-                filteredStudents[activeIndex]
-                  ? listId +
-                    "-" +
-                    filteredStudents[activeIndex].id
-                  : undefined
-              }
-              autoComplete="off"
-              placeholder="Talaba ismini yozing"
-              value={query}
-              onChange={searchStudent}
-              onFocus={() => setOpen(true)}
-              onKeyDown={handleSearchKey}
-              required
-            />
-
-            {open && (
+            {searchOpen && (
               <div
                 id={listId}
-                className="payment-student-options"
                 role="listbox"
-                aria-label="Talabalar"
+                className="panel"
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 20,
+                  maxHeight: "260px",
+                  overflowY: "auto",
+                  padding: "8px",
+                }}
               >
-                {filteredStudents.map(
-                  (student, index) => (
-                    <button
-                      key={student.id}
-                      id={listId + "-" + student.id}
-                      type="button"
-                      role="option"
-                      aria-selected={
-                        selected === student.id
-                      }
-                      className={
-                        "payment-student-option" +
-                        (
-                          activeIndex === index
-                            ? " is-active"
-                            : ""
-                        )
-                      }
-                      onMouseDown={(event) =>
-                        event.preventDefault()
-                      }
-                      onMouseEnter={() =>
-                        setActiveIndex(index)
-                      }
-                      onClick={() =>
-                        chooseStudent(student)
-                      }
-                    >
-                      <span>{student.name}</span>
+                {matches.map((student) => (
+                  <button
+                    key={student.id}
+                    type="button"
+                    role="option"
+                    aria-selected={
+                      selected === student.id
+                    }
+                    className="secondary"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginBottom: "6px",
+                      textAlign: "left",
+                    }}
+                    onClick={() =>
+                      chooseStudent(student)
+                    }
+                  >
+                    {student.name}
+                  </button>
+                ))}
 
-                      {student.phone && (
-                        <small>
-                          {student.phone}
-                        </small>
-                      )}
-                    </button>
-                  )
-                )}
-
-                {!filteredStudents.length && (
-                  <div className="payment-search-empty">
-                    Talaba topilmadi.
-                  </div>
+                {!matches.length && (
+                  <p>Talaba topilmadi.</p>
                 )}
               </div>
             )}
@@ -351,12 +213,10 @@ export default function PaymentForm({
             value={course}
             onChange={(event) => {
               setCourse(event.target.value);
-              setError("");
+              setAmount("");
             }}
           >
-            <option value="">
-              Kursni tanlang
-            </option>
+            <option value="">Kursni tanlang</option>
 
             {data.courses.map((item) => {
               const assigned = choices.find(
@@ -368,12 +228,9 @@ export default function PaymentForm({
                 <option
                   key={item.id}
                   value={item.id}
-                  disabled={
-                    !!selected && !assigned
-                  }
+                  disabled={!assigned}
                 >
                   {item.title}
-
                   {assigned
                     ? " · qarz " +
                       money(
@@ -382,9 +239,7 @@ export default function PaymentForm({
                           assigned
                         ).debt
                       )
-                    : selected
-                      ? " · biriktirilmagan"
-                      : ""}
+                    : " · talabaga biriktirilmagan"}
                 </option>
               );
             })}
@@ -394,23 +249,16 @@ export default function PaymentForm({
         <label>
           Miqdor (so‘m)
 
-          <input
-            required
+          <MoneyInput
             name="amount"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="Masalan: 170.000"
-            value={formatAmount(amount)}
-            onChange={changeAmount}
-            aria-invalid={!!amountError}
+            required
+            min={1}
+            max={debt}
+            disabled={!enrollment || debt <= 0}
+            value={amount}
+            placeholder="Masalan: 500.000"
+            onValueChange={setAmount}
           />
-
-          {amountError && (
-            <small className="danger">
-              {amountError}
-            </small>
-          )}
         </label>
 
         <label>
@@ -445,21 +293,14 @@ export default function PaymentForm({
         </label>
       </div>
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-
       <button
         type="submit"
         className="primary"
         disabled={
           busy ||
+          !selected ||
           !enrollment ||
-          debt <= 0 ||
-          amountNumber <= 0 ||
-          !!amountError
+          debt <= 0
         }
       >
         {busy

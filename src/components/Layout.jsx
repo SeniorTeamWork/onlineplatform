@@ -26,26 +26,25 @@ import {
 import { useApp } from "../context/AppContext";
 import { enrollmentsFor } from "../services/db";
 
-import logo from '../assets/tat.png'
+import {
+  canAdmin,
+  adminHome,
+} from "../services/adminAccess";
 
 import Modal from "./Modal";
+
 import "./Layout.css";
 
 export function Brand() {
   return (
     <div className="brand">
-       <img src="../assets/tat.png" alt="" />
+      <span>AI</span> Academy
     </div>
   );
 }
 
 export default function Layout() {
-  const {
-    data,
-    user,
-    cloud,
-    logout,
-  } = useApp();
+  const { data, user, cloud, logout } = useApp();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,9 +54,10 @@ export default function Layout() {
   const [menu, setMenu] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1000);
+    const timer = setTimeout(
+      () => setLoading(false),
+      1000
+    );
 
     return () => clearTimeout(timer);
   }, []);
@@ -67,28 +67,30 @@ export default function Layout() {
   }
 
   const admin = user.role === "admin";
-  const home = admin ? "/admin" : "/student";
-
-  const enrollments = enrollmentsFor(data, user.id);
 
   if (loading) {
     return (
       <div className="portal-loader" role="status">
         <div className="loader-orbit" />
-        <h2>AI Academy</h2>
+        {/* <h2>AI Academy</h2> */}
         <p>Ma’lumotlar yuklanmoqda…</p>
       </div>
     );
   }
 
-  function back() {
-    if (location.pathname === home) {
-      return;
-    }
+  const home = admin
+    ? adminHome(user)
+    : "/student";
 
-    if (location.pathname.includes("/student/lesson/")) {
-      const lesson = data.lessons.find((item) =>
-        location.pathname.endsWith("/" + item.id)
+  function back() {
+    if (location.pathname === home) return;
+
+    if (
+      location.pathname.includes("/student/lesson/")
+    ) {
+      const lesson = data.lessons.find(
+        (item) =>
+          location.pathname.endsWith("/" + item.id)
       );
 
       navigate(
@@ -103,44 +105,72 @@ export default function Layout() {
     navigate(home);
   }
 
+  const adminLinks = [
+    [
+      "/admin",
+      LayoutDashboard,
+      "Umumiy ko‘rinish",
+      "dashboard",
+    ],
+    [
+      "/admin/lessons",
+      Clapperboard,
+      "Kurslar va darslar",
+      "lessons",
+    ],
+    [
+      "/admin/students",
+      Users,
+      "Talabalar",
+      "students",
+    ],
+    [
+      "/admin/finance",
+      Wallet,
+      "Moliya",
+      "finance",
+    ],
+    [
+      "/admin/reviews",
+      ClipboardCheck,
+      "Amaliy ishlar",
+      "reviews",
+    ],
+    [
+      "/admin/support",
+      MessageSquare,
+      "Murojaatlar",
+      "support",
+    ],
+    [
+      "/admin/trials",
+      Users,
+      "Sinovdagi talabalar",
+      "trials",
+    ],
+  ];
+
+  const studentLinks = [
+    ["/student", BookOpen, "Mening kurslarim"],
+    ["/student/certificate", Award, "Sertifikatlar"],
+    ["/student/support", Headphones, "Yordam"],
+    ["/student/profile", UserRound, "Profil"],
+  ];
+
   const links = admin
-    ? [
-        ["/admin", LayoutDashboard, "Umumiy ko‘rinish"],
-        ["/admin/lessons", Clapperboard, "Kurslar va darslar"],
-        ["/admin/students", Users, "Talabalar"],
-        ["/admin/finance", Wallet, "Moliya"],
-        ["/admin/reviews", ClipboardCheck, "Amaliy ishlar"],
-        ["/admin/support", MessageSquare, "Murojaatlar"],
-      ]
-    : [
-        ["/student", BookOpen, "Mening kurslarim"],
-        ["/student/certificate", Award, "Sertifikatlar"],
-        ["/student/support", Headphones, "Yordam"],
-        ["/student/profile", UserRound, "Profil"],
-      ];
-
-  async function signOut() {
-    const success = await logout();
-
-    if (!success) return;
-
-    navigate("/login", {
-      replace: true,
-    });
-  }
+    ? adminLinks.filter(
+        ([, , , page]) => canAdmin(user, page)
+      )
+    : studentLinks;
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <img style={{width: '100px'}} src={logo} alt="" />
         <button
           type="button"
           className="mobile-menu ghost"
           onClick={() => setMenu(!menu)}
-          aria-label="Menyuni ochish yoki yopish"
-          aria-expanded={menu}
-          aria-controls="main-sidebar"
-    
+          aria-label="Menyu"
         >
           <Menu />
         </button>
@@ -148,11 +178,11 @@ export default function Layout() {
         <Brand />
 
         <div className="header-account">
-          {/* <span>{user.name}</span> */}
+          <span>{user.name}</span>
 
           <button
             type="button"
-            className="secondary red-design"
+            className="secondary"
             onClick={() => setConfirm(true)}
           >
             <LogOut size={22} />
@@ -162,15 +192,18 @@ export default function Layout() {
       </header>
 
       <aside
-        id="main-sidebar"
-        className={"sidebar " + (menu ? "open" : "")}
+        className={
+          "sidebar " + (menu ? "open" : "")
+        }
       >
         <div className="sidebar-brand">
           <Brand />
         </div>
 
         <p className="nav-label">
-          {admin ? "ADMIN PANEL" : "O‘QUVCHI PANELI"}
+          {admin
+            ? "ADMIN PANEL"
+            : "O‘QUVCHI PANELI"}
         </p>
 
         <nav>
@@ -187,30 +220,37 @@ export default function Layout() {
 
               {to === "/student" && (
                 <div className="subnav">
-                  {enrollments.map((enrollment) => {
-                    const course = data.courses.find(
-                      (item) => item.id === enrollment.courseId
-                    );
-
-                    return (
+                  {enrollmentsFor(data, user.id).map(
+                    (enrollment) => (
                       <NavLink
                         key={enrollment.id}
                         to={
-                          "/student/course/" + enrollment.courseId
+                          "/student/course/" +
+                          enrollment.courseId
                         }
                         onClick={() => setMenu(false)}
                       >
-                        {course?.title || "Kurs"}
+                        {data.courses.find(
+                          (course) =>
+                            course.id ===
+                            enrollment.courseId
+                        )?.title || "Kurs"}
                       </NavLink>
-                    );
-                  })}
+                    )
+                  )}
                 </div>
               )}
             </div>
           ))}
         </nav>
 
-       
+        <div className="sidebar-bottom">
+          <span className="badge">
+            {cloud ? "Onlayn" : "Demo rejim"}
+          </span>
+
+          <p>Bilim sari yangi qadam.</p>
+        </div>
       </aside>
 
       <div className="main-wrap">
@@ -227,7 +267,9 @@ export default function Layout() {
           <Outlet />
         </main>
 
-      
+        {/* <footer>
+          © {new Date().getFullYear()} AI Academy
+        </footer> */}
       </div>
 
       {confirm && (
@@ -235,6 +277,8 @@ export default function Layout() {
           title="Hisobdan chiqmoqchimisiz?"
           onClose={() => setConfirm(false)}
         >
+          <p>Chiqishni tasdiqlaysizmi?</p>
+
           <div className="button-row">
             <button
               type="button"
@@ -246,9 +290,14 @@ export default function Layout() {
 
             <button
               type="button"
-              style={{padding: '12px'}}
-              className="red-design"
-              onClick={signOut}
+              className="primary"
+              onClick={async () => {
+                if (!(await logout())) return;
+
+                navigate("/login", {
+                  replace: true,
+                });
+              }}
             >
               Ha, chiqish
             </button>

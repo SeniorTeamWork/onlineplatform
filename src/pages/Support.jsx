@@ -30,9 +30,9 @@ export default function Support() {
   return <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">BIZ SIZ BILAN BIRGAMIZ</div>
+          {/* <div className="eyebrow">BIZ SIZ BILAN BIRGAMIZ</div> */}
           <h1>Qo‘llab-quvvatlash</h1>
-          <p>Savollaringiz bormi? O‘rganish yo‘lida yordam beramiz.</p>
+          <p>Savollaringiz bo'lsa bizga murojaat qiling!</p>
         </div>
         <MessageCircle className="purple" size={29} />
       </div>

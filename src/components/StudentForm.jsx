@@ -10,6 +10,11 @@ import {
   money,
 } from "../services/db";
 
+import {
+  PhoneInput,
+  MoneyInput,
+} from "./FormattedInputs";
+
 import Modal from "./Modal";
 
 export default function StudentForm({
@@ -26,6 +31,8 @@ export default function StudentForm({
   } = useApp();
 
   const [settings, setSettings] = useState({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const [draft, setDraft] = useState(() =>
     student
@@ -33,8 +40,8 @@ export default function StudentForm({
       : {
           id: uid(),
           name: "",
-          username: "",
           email: "",
+          username: "",
           password: "",
           phone: "",
           notes: "",
@@ -52,7 +59,17 @@ export default function StudentForm({
       : []
   );
 
-  const [error, setError] = useState("");
+  const existingEnrollments = enrollmentsFor(
+    data,
+    draft.id
+  );
+
+  const newCourses = selected.filter(
+    (id) =>
+      !existingEnrollments.some(
+        (enrollment) => enrollment.courseId === id
+      )
+  );
 
   function field(key, value) {
     setDraft((previous) => ({
@@ -61,7 +78,7 @@ export default function StudentForm({
     }));
   }
 
-  function courseSetting(courseId, key, value) {
+  function paymentSetting(courseId, key, value) {
     setSettings((previous) => ({
       ...previous,
       [courseId]: {
@@ -73,9 +90,11 @@ export default function StudentForm({
 
   async function save(event) {
     event.preventDefault();
-    setError("");
 
-    let clean;
+    if (busy) return;
+
+    setError("");
+    setBusy(true);
 
     try {
       const username = availableUsername(
@@ -84,20 +103,15 @@ export default function StudentForm({
         draft.id
       );
 
-      clean = {
+      const clean = {
         ...draft,
         username,
         email:
           student?.email ||
           username + "@academy.invalid",
       };
-    } catch (err) {
-      setError(err.message);
-      return;
-    }
 
-    if (cloud) {
-      try {
+      if (cloud) {
         const result = await command("student", {
           draft: clean,
           selected,
@@ -105,44 +119,31 @@ export default function StudentForm({
         });
 
         onSaved(result.studentId);
-      } catch (err) {
-        setError(err.message);
+      } else {
+        const saved = await update((next) =>
+          saveStudentWithPayment(
+            next,
+            clean,
+            selected,
+            settings,
+            user.id
+          )
+        );
+
+        if (saved) {
+          onSaved(draft.id);
+        } else {
+          setError(
+            "Saqlanmadi. Ekrandagi xabarni tekshiring."
+          );
+        }
       }
-
-      return;
-    }
-
-    const success = await update((next) =>
-      saveStudentWithPayment(
-        next,
-        clean,
-        selected,
-        settings,
-        user.id
-      )
-    );
-
-    if (success) {
-      onSaved(draft.id);
-    } else {
-      setError(
-        "Saqlanmadi. Ekrandagi xabarni tekshiring."
-      );
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setBusy(false);
     }
   }
-
-  const existingEnrollments = enrollmentsFor(
-    data,
-    draft.id
-  );
-
-  const newCourseIds = selected.filter(
-    (courseId) =>
-      !existingEnrollments.some(
-        (enrollment) =>
-          enrollment.courseId === courseId
-      )
-  );
 
   return (
     <Modal
@@ -157,7 +158,6 @@ export default function StudentForm({
         <div className="form-grid">
           <label>
             To‘liq ism
-
             <input
               required
               minLength={3}
@@ -170,15 +170,14 @@ export default function StudentForm({
 
           <label>
             Login
-
             <input
               type="text"
-              required
-              minLength={3}
-              maxLength={40}
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
+              minLength={3}
+              maxLength={40}
+              required
               value={draft.username || ""}
               onChange={(event) =>
                 field("username", event.target.value)
@@ -189,16 +188,16 @@ export default function StudentForm({
           <label>
             {cloud
               ? student
-                ? "Parol — Auth’da saqlanadi"
+                ? "Parol (Authda saqlanadi)"
                 : "Boshlang‘ich parol"
               : "Demo parol"}
 
             <input
               type="password"
-              disabled={cloud && !!student}
+              autoComplete="new-password"
+              disabled={cloud && Boolean(student)}
               required={!cloud || !student}
               minLength={8}
-              autoComplete="new-password"
               value={draft.password || ""}
               onChange={(event) =>
                 field("password", event.target.value)
@@ -208,19 +207,16 @@ export default function StudentForm({
 
           <label>
             Telefon
-
-            <input
-              type="tel"
+            <PhoneInput
               value={draft.phone || ""}
-              onChange={(event) =>
-                field("phone", event.target.value)
+              onValueChange={(value) =>
+                field("phone", value)
               }
             />
           </label>
 
           <label>
             Holat
-
             <select
               aria-label="Talaba holati"
               value={
@@ -230,16 +226,18 @@ export default function StudentForm({
                     ? "deposit"
                     : "true"
               }
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.target.value;
+
                 setDraft((previous) => ({
                   ...previous,
-                  active: event.target.value !== "false",
+                  active: value !== "false",
                   accessMode:
-                    event.target.value === "deposit"
+                    value === "deposit"
                       ? "deposit"
                       : "active",
-                }))
-              }
+                }));
+              }}
             >
               <option value="true">Faol</option>
               <option value="false">Nofaol</option>
@@ -249,7 +247,6 @@ export default function StudentForm({
 
           <label>
             Izoh
-
             <textarea
               value={draft.notes || ""}
               onChange={(event) =>
@@ -283,15 +280,17 @@ export default function StudentForm({
               <input
                 type="checkbox"
                 checked={selected.includes(course.id)}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const checked = event.target.checked;
+
                   setSelected((previous) =>
-                    event.target.checked
+                    checked
                       ? [...previous, course.id]
                       : previous.filter(
                           (id) => id !== course.id
                         )
-                  )
-                }
+                  );
+                }}
               />
 
               <span>
@@ -310,27 +309,24 @@ export default function StudentForm({
           ))}
         </fieldset>
 
-        {newCourseIds.map((courseId) => (
-          <fieldset key={courseId}>
+        {newCourses.map((id) => (
+          <fieldset key={id}>
             <legend>
               {
                 data.courses.find(
-                  (course) => course.id === courseId
+                  (course) => course.id === id
                 )?.title
-              }{" "}
-              — dastlabki to‘lov
+              }
+              {" — "}dastlabki to‘lov
             </legend>
 
             <label>
               To‘lov holati
-
               <select
-                value={
-                  settings[courseId]?.mode || "trial"
-                }
+                value={settings[id]?.mode || "trial"}
                 onChange={(event) =>
-                  courseSetting(
-                    courseId,
+                  paymentSetting(
+                    id,
                     "mode",
                     event.target.value
                   )
@@ -350,43 +346,30 @@ export default function StudentForm({
               </select>
             </label>
 
-            {settings[courseId]?.mode === "deposit" && (
+            {settings[id]?.mode === "deposit" && (
               <label>
                 Depozit miqdori (so‘m)
-
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
+                <MoneyInput
                   required
-                  value={
-                    settings[courseId]?.amount || ""
-                  }
-                  onChange={(event) =>
-                    courseSetting(
-                      courseId,
-                      "amount",
-                      event.target.value
-                    )
+                  min={1}
+                  value={settings[id]?.amount || ""}
+                  onValueChange={(value) =>
+                    paymentSetting(id, "amount", value)
                   }
                 />
               </label>
             )}
 
             {["active", "deposit"].includes(
-              settings[courseId]?.mode
+              settings[id]?.mode
             ) && (
               <label>
                 To‘lov usuli
-
                 <select
-                  value={
-                    settings[courseId]?.method ||
-                    "Naqd"
-                  }
+                  value={settings[id]?.method || "Naqd"}
                   onChange={(event) =>
-                    courseSetting(
-                      courseId,
+                    paymentSetting(
+                      id,
                       "method",
                       event.target.value
                     )
@@ -425,9 +408,9 @@ export default function StudentForm({
         <button
           type="submit"
           className="primary"
-          disabled={!selected.length}
+          disabled={busy || !selected.length}
         >
-          Saqlash
+          {busy ? "Saqlanmoqda…" : "Saqlash"}
         </button>
       </form>
     </Modal>

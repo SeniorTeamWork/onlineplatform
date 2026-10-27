@@ -8,6 +8,11 @@ import {
 
 import { useApp } from "./context/AppContext";
 
+import {
+  adminHome,
+  canAdmin,
+} from "./services/adminAccess";
+
 import Layout from "./components/Layout";
 
 import Login from "./pages/Login";
@@ -18,9 +23,9 @@ import Support from "./pages/Support";
 import Profile from "./pages/Profile";
 
 import Admin from "./pages/Admin";
-import AdminTrials from "./pages/AdminTrials";
 import AdminLessons from "./pages/AdminLessons";
 import AdminStudents from "./pages/AdminStudents";
+import AdminTrials from "./pages/AdminTrials";
 import AdminReviews from "./pages/AdminReviews";
 import AdminSupport from "./pages/AdminSupport";
 import StudentDetail from "./pages/StudentDetail";
@@ -36,13 +41,32 @@ function Protected({ role }) {
   if (user.role !== role) {
     return (
       <Navigate
-        to={user.role === "admin" ? "/admin" : "/student"}
+        to={
+          user.role === "admin"
+            ? "/admin"
+            : "/student"
+        }
         replace
       />
     );
   }
 
   return <Outlet />;
+}
+
+function AdminPage({ page, children }) {
+  const { user } = useApp();
+
+  if (!canAdmin(user, page)) {
+    return (
+      <Navigate
+        to={adminHome(user)}
+        replace
+      />
+    );
+  }
+
+  return children;
 }
 
 export default function App() {
@@ -53,7 +77,10 @@ export default function App() {
         element={<Navigate to="/login" replace />}
       />
 
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/login"
+        element={<Login />}
+      />
 
       <Route element={<Protected role="student" />}>
         <Route path="/student" element={<Layout />}>
@@ -93,41 +120,90 @@ export default function App() {
 
       <Route element={<Protected role="admin" />}>
         <Route path="/admin" element={<Layout />}>
-          <Route index element={<Admin />} />
+          <Route
+            index
+            element={
+              <AdminPage page="dashboard">
+                <Admin />
+              </AdminPage>
+            }
+          />
 
           <Route
             path="lessons"
-            element={<AdminLessons />}
-          />
-
-          <Route
-            path="finance"
-            element={<Finance />}
-          />
-
-          <Route
-            path="trials"
-            element={<AdminTrials />}
+            element={
+              <AdminPage page="lessons">
+                <AdminLessons />
+              </AdminPage>
+            }
           />
 
           <Route
             path="students"
-            element={<AdminStudents />}
+            element={
+              <AdminPage page="students">
+                <AdminStudents />
+              </AdminPage>
+            }
           />
 
           <Route
             path="students/:studentId"
-            element={<StudentDetail />}
+            element={
+              <AdminPage page="students">
+                <StudentDetail />
+              </AdminPage>
+            }
           />
 
           <Route
-            path="reviews"  
-            element={<AdminReviews />}
+            path="finance"
+            element={
+              <AdminPage page="finance">
+                <Finance />
+              </AdminPage>
+            }
+          />
+
+          <Route
+            path="trials"
+            element={
+              <AdminPage page="trials">
+                <AdminTrials />
+              </AdminPage>
+            }
+          />
+
+          <Route
+            path="reviews"
+            element={
+              <AdminPage page="reviews">
+                <AdminReviews />
+              </AdminPage>
+            }
           />
 
           <Route
             path="support"
-            element={<AdminSupport />}
+            element={
+              <AdminPage page="support">
+                <AdminSupport />
+              </AdminPage>
+            }
+          />
+
+          <Route
+            path="access-denied"
+            element={
+              <div className="empty">
+                <h1>Ruxsat berilgan sahifa yo‘q</h1>
+
+                <p>
+                  Asosiy administratorga murojaat
+                  qiling.
+                </p>
+              </div>
+            }
           />
         </Route>
       </Route>
@@ -138,6 +214,7 @@ export default function App() {
           <div className="empty">
             <h1>404</h1>
             <p>Sahifa topilmadi.</p>
+
             <Link to="/login">
               Bosh sahifaga qaytish
             </Link>
@@ -147,69 +224,3 @@ export default function App() {
     </Routes>
   );
 }
-
-// DO $$
-// DECLARE
-//   admin_email text := 'salom@gmail.com';
-//   account auth.users%ROWTYPE;
-//   doc jsonb;
-//   user_list jsonb;
-// BEGIN
-//   SELECT * INTO account
-//   FROM auth.users
-//   WHERE lower(email) = lower(trim(admin_email));
-
-//   IF account.id IS NULL THEN
-//     RAISE EXCEPTION 'Bu email Authentication → Users ichida topilmadi';
-//   END IF;
-
-//   SELECT data INTO doc
-//   FROM public.academy_state
-//   WHERE id = 1
-//   FOR UPDATE;
-
-//   IF doc IS NULL THEN
-//     RAISE EXCEPTION 'academy_state ichida id=1 yozuvi topilmadi';
-//   END IF;
-
-//   user_list := COALESCE(doc->'users', '[]'::jsonb);
-
-//   IF EXISTS (
-//     SELECT 1
-//     FROM jsonb_array_elements(user_list) AS u
-//     WHERE u->>'id' = account.id::text
-//   ) THEN
-//     SELECT jsonb_agg(
-//       CASE
-//         WHEN u->>'id' = account.id::text
-//         THEN u || jsonb_build_object(
-//           'role', 'admin',
-//           'active', true
-//         )
-//         ELSE u
-//       END
-//       ORDER BY position
-//     )
-//     INTO user_list
-//     FROM jsonb_array_elements(user_list)
-//       WITH ORDINALITY AS items(u, position);
-//   ELSE
-//     user_list := user_list || jsonb_build_array(
-//       jsonb_build_object(
-//         'id', account.id,
-//         'email', account.email,
-//         'name', 'Administrator',
-//         'role', 'admin',
-//         'active', true,
-//         'phone', '',
-//         'createdAt', now()
-//       )
-//     );
-//   END IF;
-
-//   UPDATE public.academy_state
-//   SET
-//     data = jsonb_set(doc, '{users}', user_list),
-//     revision = revision + 1
-//   WHERE id = 1;
-// END $$;

@@ -1,15 +1,16 @@
 import { useState } from "react";
 
-import { supabase } from "../services/supabase";
 import { useApp } from "../context/AppContext";
+import { availableUsername } from "../services/identity";
+import { supabase } from "../services/supabase";
 
 import {
   putFile,
   updateProfile,
 } from "../services/db";
 
-import { availableUsername } from "../services/identity";
 import Avatar from "../components/Avatar";
+import { PhoneInput } from "../components/FormattedInputs";
 
 export default function Profile() {
   const {
@@ -38,35 +39,31 @@ export default function Profile() {
       const fields = {
         name: values.get("name"),
         email: user.email,
+
         username: availableUsername(
           data,
           values.get("username"),
           user.id
         ),
+
         phone: values.get("phone"),
         password: values.get("password"),
       };
 
-      if (
-        fields.password !== values.get("confirm")
-      ) {
-        throw new Error(
-          "Yangi parollar bir xil emas."
-        );
+      if (fields.password !== values.get("confirm")) {
+        throw Error("Yangi parollar bir xil emas.");
       }
 
       if (file) {
-        const allowed = [
-          "image/jpeg",
-          "image/png",
-          "image/webp",
-        ];
-
         if (
-          !allowed.includes(file.type) ||
+          ![
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+          ].includes(file.type) ||
           file.size > 3 * 1024 * 1024
         ) {
-          throw new Error(
+          throw Error(
             "JPG, PNG yoki WebP rasm tanlang. Maksimal hajm: 3 MB."
           );
         }
@@ -77,11 +74,10 @@ export default function Profile() {
       let saved;
 
       if (cloud) {
-        const auth =
-          await supabase.auth.signInWithPassword({
-            email: user.email,
-            password: values.get("current"),
-          });
+        const auth = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: values.get("current"),
+        });
 
         if (auth.error) throw auth.error;
 
@@ -96,13 +92,12 @@ export default function Profile() {
         });
 
         if (fields.password) {
-          const result =
-            await supabase.auth.updateUser({
-              password: fields.password,
-            });
+          const result = await supabase.auth.updateUser({
+            password: fields.password,
+          });
 
           if (result.error) {
-            throw new Error(
+            throw Error(
               "Profil saqlandi, ammo parol yangilanmadi: " +
                 result.error.message
             );
@@ -111,18 +106,18 @@ export default function Profile() {
 
         saved = true;
       } else {
-        saved = await update((next) => {
+        saved = await update((draft) => {
           updateProfile(
-            next,
+            draft,
             user.id,
             fields,
             values.get("current")
           );
 
-          next.users.find(
+          draft.users.find(
             (account) => account.id === user.id
           ).username = availableUsername(
-            next,
+            draft,
             fields.username,
             user.id
           );
@@ -130,9 +125,9 @@ export default function Profile() {
       }
 
       if (saved) {
-        form.elements.current.value = "";
-        form.elements.password.value = "";
-        form.elements.confirm.value = "";
+        form.elements.namedItem("current").value = "";
+        form.elements.namedItem("password").value = "";
+        form.elements.namedItem("confirm").value = "";
 
         setFile(null);
         notify("Profil saqlandi.");
@@ -149,9 +144,7 @@ export default function Profile() {
       <div className="page-heading">
         <div>
           <h1>Mening profilim</h1>
-          <p>
-            Shaxsiy ma’lumotlar va hisob sozlamalari
-          </p>
+          <p>Shaxsiy ma’lumotlar va hisob sozlamalari</p>
         </div>
       </div>
 
@@ -161,15 +154,12 @@ export default function Profile() {
         <form onSubmit={save}>
           <label>
             Profil rasmi
-
             <input
               key={file?.name || "none"}
               type="file"
               accept="image/png,image/jpeg,image/webp"
               onChange={(event) =>
-                setFile(
-                  event.target.files[0] || null
-                )
+                setFile(event.target.files[0] || null)
               }
             />
           </label>
@@ -177,7 +167,6 @@ export default function Profile() {
           <div className="form-grid">
             <label>
               Ism va familiya
-
               <input
                 name="name"
                 defaultValue={user.name}
@@ -188,17 +177,15 @@ export default function Profile() {
 
             <label>
               Telefon raqami
-
-              <input
+              <PhoneInput
+                key={user.id}
                 name="phone"
-                type="tel"
                 defaultValue={user.phone || ""}
               />
             </label>
 
             <label>
               Login
-
               <input
                 name="username"
                 type="text"
@@ -214,7 +201,6 @@ export default function Profile() {
 
             <label>
               Joriy parol
-
               <input
                 name="current"
                 type="password"
@@ -225,7 +211,6 @@ export default function Profile() {
 
             <label>
               Yangi parol (ixtiyoriy)
-
               <input
                 name="password"
                 type="password"
@@ -236,7 +221,6 @@ export default function Profile() {
 
             <label>
               Yangi parolni takrorlang
-
               <input
                 name="confirm"
                 type="password"
