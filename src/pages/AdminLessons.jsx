@@ -286,36 +286,33 @@ for (const material of selectedMaterials) {
     }
   }
 
-  function remove(lesson) {
-    const confirmed = window.confirm(
-      "“" +
-        lesson.title +
-        "” darsi arxivlansinmi? " +
-        "Barcha natijalar tarixi saqlanadi."
-    );
+  async function remove(lesson) {
+  const confirmed = window.confirm(
+    `“${lesson.title}” darsini butunlay o‘chirmoqchimisiz?`
+  );
 
-    if (!confirmed) return;
+  if (!confirmed) return;
 
-    update((state) => {
-      const item = state.lessons.find(
-        (entry) => entry.id === lesson.id
+  try {
+    await update((state) => {
+      // Darsni butunlay o‘chirish
+      state.lessons = state.lessons.filter(
+        (item) => item.id !== lesson.id
       );
 
-      item.published = false;
-      item.archived = true;
-
-      Object.keys(state.testSessions).forEach(
-        (key) => {
-          if (
-            state.testSessions[key].lessonId ===
-            lesson.id
-          ) {
-            delete state.testSessions[key];
-          }
+      // Shu darsga tegishli test sessiyalarini o‘chirish
+      Object.keys(state.testSessions || {}).forEach((key) => {
+        if (state.testSessions[key].lessonId === lesson.id) {
+          delete state.testSessions[key];
         }
-      );
+      });
     });
+
+    notify("Dars muvaffaqiyatli o‘chirildi.");
+  } catch (error) {
+    notify(error.message || "Darsni o‘chirishda xatolik yuz berdi.");
   }
+}
 
   function move(index, direction) {
     update((state) => {
