@@ -42,7 +42,7 @@ export default function AdminLessons() {
   const [file, setFile] = useState(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [materials, setMaterials] = useState([]);
+  const [materials, setMaterials] = useState([null, null, null]);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
 
@@ -61,7 +61,7 @@ export default function AdminLessons() {
 
     setFileInputKey((value) => value + 1);
     setFile(null);
-    setMaterials([]);
+    setMaterials([null, null, null]);
     setError("");
     setProgress(0);
   }
@@ -189,18 +189,21 @@ export default function AdminLessons() {
       return;
     }
 
-    if (
-      materials.some(
-        (material) =>
-          !/\.(pdf|xlsx?)$/i.test(material.name) ||
-          material.size > 20 * 1024 * 1024
-      )
-    ) {
-      setError(
-        "PDF yoki Excel fayl tanlang (har biri 20 MB gacha)."
-      );
-      return;
-    }
+   const selectedMaterials = materials.filter(Boolean);
+
+if (
+  selectedMaterials.some(
+    (material) =>
+      !/\.(pdf|xlsx?)$/i.test(material.name) ||
+      material.size <= 0 ||
+      material.size > 20 * 1024 * 1024
+  )
+) {
+  setError(
+    "PDF yoki Excel fayl tanlang. Har biri 20 MB gacha bo‘lishi kerak."
+  );
+  return;
+}
 
     setBusy(true);
     setProgress(0);
@@ -222,17 +225,15 @@ export default function AdminLessons() {
         next.video = "";
       }
 
-      next.materials = [
-        ...(draft.materials || []),
-      ];
+     next.materials = [...(draft.materials || [])];
 
-      for (const material of materials) {
-        next.materials.push({
-          fileId: await putFile(material),
-          name: material.name,
-          size: material.size,
-        });
-      }
+for (const material of selectedMaterials) {
+  next.materials.push({
+    fileId: await putFile(material),
+    name: material.name,
+    size: material.size,
+  });
+}
 
       const saved = await update((state) => {
         const duplicate = state.lessons.find(
@@ -705,23 +706,55 @@ export default function AdminLessons() {
                   />
                 </label>
 
-                <label>
-                  Qo‘shimcha materiallar
-                  (PDF, Excel; har biri 20 MB gacha)
+            <div className="form-group">
+  <label>Qo‘shimcha materiallar (PDF, Excel; har biri 20 MB gacha)</label>
 
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.xls,.xlsx"
-                    onChange={(event) =>
-                      setMaterials(
-                        Array.from(
-                          event.target.files || []
-                        )
-                      )
-                    }
-                  />
-                </label>
+  {[0, 1, 2].map((index) => (
+    <div key={index} className="material-upload">
+      <label htmlFor={`lesson-material-${index}`}>
+        {index + 1}-material
+      </label>
+
+      <input
+        id={`lesson-material-${index}`}
+        type="file"
+        accept=".pdf,.xls,.xlsx"
+        onChange={(event) => {
+          const selectedFile = event.target.files?.[0] || null;
+
+          setMaterials((previous) =>
+            previous.map((item, itemIndex) =>
+              itemIndex === index ? selectedFile : item
+            )
+          );
+
+          event.target.value = "";
+        }}
+      />
+
+      {materials[index] && (
+        <p>
+          {materials[index].name}
+          {" — "}
+          {(materials[index].size / (1024 * 1024)).toFixed(2)} MB
+          <button
+            type="button"
+            className="secondary"
+            onClick={() =>
+              setMaterials((previous) =>
+                previous.map((item, itemIndex) =>
+                  itemIndex === index ? null : item
+                )
+              )
+            }
+          >
+            Olib tashlash
+          </button>
+        </p>
+      )}
+    </div>
+  ))}
+</div>
 
                 {(draft.materials || []).map(
                   (material) => (
