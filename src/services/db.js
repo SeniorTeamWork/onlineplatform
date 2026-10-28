@@ -971,3 +971,22 @@ export function periodStatistics(data, days) {
     to: buckets.at(-1).date,
   };
 }
+
+
+
+
+export function deleteLesson(data, lessonId) {
+  const lesson = data.lessons.find(
+    (item) => item.id === lessonId
+  );
+
+  if (!lesson) {
+    throw Error("Dars topilmadi.");
+  }
+
+  data.lessons = data.lessons.filter(
+    (item) => item.id !== lessonId
+  );
+
+  return data;
+}

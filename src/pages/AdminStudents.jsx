@@ -130,7 +130,7 @@ export default function AdminStudents() {
         </div>
 
         <div className="button-row">
-          {isOwner(user) && (
+          {/* {isOwner(user) && (
             <button
               type="button"
               className="secondary"
@@ -138,7 +138,7 @@ export default function AdminStudents() {
             >
               + Admin qo‘shish
             </button>
-          )}
+          )} */}
 
           <button
             type="button"

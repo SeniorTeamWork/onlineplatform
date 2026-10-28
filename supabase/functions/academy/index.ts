@@ -1,4 +1,11 @@
+import { applyLessonDeletion } from "../_shared/deleteLesson.js";
+
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+import {
+  staffAction,
+  mutateStaff,
+} from "../_shared/staff.js";
 
 import {
   availableUsername,
@@ -223,6 +230,21 @@ Deno.serve(async (req) => {
       checkAdminAction(user, body.action);
     }
 
+    if (
+  body.action === "staffHeartbeat" ||
+  body.action === "staffOverview"
+) {
+  const result = await staffAction(
+    db,
+    state,
+    user,
+    body.action
+  );
+
+  return response(result);
+}
+
+
     const emailChanged =
       user.email !== auth.user!.email;
 
@@ -421,7 +443,25 @@ Deno.serve(async (req) => {
 
     let result: any;
 
-    if (body.action === "watchLesson") {
+    if (
+  body.action === "editStaff" ||
+  body.action === "deleteStaff"
+) {
+  result = mutateStaff(
+    state,
+    user,
+    body.action,
+    body
+  );
+} else if (body.action === "deleteLesson") {
+      must(
+        admin && canAdmin(user, "lessons"),
+        "Darsni o‘chirish uchun kurslar va darslar bo‘limiga ruxsat kerak."
+      );
+
+      result = applyLessonDeletion(state, body.lessonId);
+    }
+     else if (body.action === "watchLesson") {
       must(
         !admin &&
           D.unlocked(
