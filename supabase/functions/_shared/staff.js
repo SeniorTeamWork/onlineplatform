@@ -1,6 +1,8 @@
 import {
   ADMIN_PAGES,
   isOwner,
+  canAdmin,
+  canEditStaff,
   validAdminPages,
 } from "./adminAccess.js";
 
@@ -10,7 +12,26 @@ import {
 
 export const ONLINE_WINDOW_MS = 90000;
 
-function staffAccounts(users) {
+function ownerAccount(user) {
+  return (
+    user?.role === "admin" &&
+    !user.deletedAt &&
+    !Object.prototype.hasOwnProperty.call(
+      user,
+      "adminPages"
+    )
+  );
+}
+
+function otherOwnerExists(users, exceptId) {
+  return users.some(
+    (user) =>
+      user.id !== exceptId &&
+      isOwner(user)
+  );
+}
+
+function accounts(users) {
   return users.filter(
     (user) =>
       user.role === "admin" &&
@@ -18,10 +39,29 @@ function staffAccounts(users) {
   );
 }
 
+export function staffPages(actor, pages, owner) {
+  if (typeof owner !== "boolean") {
+    throw Error("Hisob turi noto‘g‘ri.");
+  }
+
+  if (owner) {
+    if (!isOwner(actor)) {
+      throw Error(
+        "Administratorni faqat asosiy administrator tayinlay oladi."
+      );
+    }
+
+    return null;
+  }
+
+  return validAdminPages(pages, actor);
+}
+
 export function staffSnapshot(
   users,
   presence,
-  now = Date.now()
+  now = Date.now(),
+  actor
 ) {
   const seen = new Map(
     presence.map((row) => [
@@ -30,12 +70,8 @@ export function staffSnapshot(
     ])
   );
 
-  const staff = staffAccounts(users).map((user) => {
-    const owner =
-      !Object.prototype.hasOwnProperty.call(
-        user,
-        "adminPages"
-      );
+  const staff = accounts(users).map((user) => {
+    const owner = ownerAccount(user);
 
     const timestamp = Date.parse(
       seen.get(user.id) || ""
@@ -54,6 +90,18 @@ export function staffSnapshot(
       active,
       owner,
       createdAt: user.createdAt || null,
+
+      canEdit: actor
+        ? canEditStaff(actor, user)
+        : false,
+
+      canDelete: actor
+        ? canEditStaff(actor, user) &&
+          (
+            !isOwner(user) ||
+            otherOwnerExists(users, user.id)
+          )
+        : false,
 
       lastSeenAt: valid
         ? new Date(timestamp).toISOString()
@@ -82,23 +130,13 @@ export function staffSnapshot(
   return {
     staff,
     serverTime: new Date(now).toISOString(),
-    onlineWindowSeconds:
-      ONLINE_WINDOW_MS / 1000,
+    onlineWindowSeconds: 90,
 
     counts: {
       total: staff.length,
-
-      active: staff.filter(
-        (user) => user.active
-      ).length,
-
-      blocked: staff.filter(
-        (user) => !user.active
-      ).length,
-
-      online: staff.filter(
-        (user) => user.online
-      ).length,
+      active: staff.filter((u) => u.active).length,
+      blocked: staff.filter((u) => !u.active).length,
+      online: staff.filter((u) => u.online).length,
     },
   };
 }
@@ -123,8 +161,7 @@ export async function staffAction(
       .upsert(
         {
           user_id: actor.id,
-          last_seen_at:
-            new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
         },
         {
           onConflict: "user_id",
@@ -142,14 +179,14 @@ export async function staffAction(
 
   if (
     action !== "staffOverview" ||
-    !isOwner(actor)
+    !canAdmin(actor, "staff")
   ) {
     throw Error(
-      "Xodimlar ro‘yxatini faqat asosiy admin ko‘ra oladi."
+      "Xodimlar bo‘limiga ruxsat yo‘q."
     );
   }
 
-  const ids = staffAccounts(state.users).map(
+  const ids = accounts(state.users).map(
     (user) => user.id
   );
 
@@ -177,7 +214,12 @@ export async function staffAction(
     rows.push(...(data || []));
   }
 
-  return staffSnapshot(state.users, rows);
+  return staffSnapshot(
+    state.users,
+    rows,
+    Date.now(),
+    actor
+  );
 }
 
 export function mutateStaff(
@@ -186,8 +228,10 @@ export function mutateStaff(
   action,
   body
 ) {
-  if (!isOwner(actor)) {
-    throw Error("Faqat asosiy admin uchun.");
+  if (!canAdmin(actor, "staff")) {
+    throw Error(
+      "Xodimlarni boshqarishga ruxsat yo‘q."
+    );
   }
 
   if (
@@ -197,37 +241,42 @@ export function mutateStaff(
   }
 
   const target = state.users.find(
-    (item) => item.id === body.userId
+    (item) =>
+      item.id === body.userId &&
+      item.role === "admin" &&
+      !item.deletedAt
   );
 
-  if (
-    !target ||
-    target.role !== "admin" ||
-    target.deletedAt
-  ) {
+  if (!target) {
     throw Error(
       "Xodim topilmadi. Ro‘yxatni yangilang."
     );
   }
 
-  if (
-    target.id === actor.id ||
-    !Object.prototype.hasOwnProperty.call(
-      target,
-      "adminPages"
-    )
-  ) {
+  if (!canEditStaff(actor, target)) {
     throw Error(
-      "Asosiy admin hisobini bu bo‘limdan o‘zgartirib bo‘lmaydi."
+      "Bu xodimni tahrirlashga ruxsat yo‘q."
     );
   }
 
+  const targetOwner = ownerAccount(target);
   const now = new Date().toISOString();
 
   if (action === "deleteStaff") {
-    target.active = false;
-    target.deletedAt = now;
-    target.deletedBy = actor.id;
+    if (
+      isOwner(target) &&
+      !otherOwnerExists(state.users, target.id)
+    ) {
+      throw Error(
+        "Oxirgi faol administratorni o‘chirib bo‘lmaydi."
+      );
+    }
+
+    Object.assign(target, {
+      active: false,
+      deletedAt: now,
+      deletedBy: actor.id,
+    });
 
     return { staffId: target.id };
   }
@@ -237,15 +286,33 @@ export function mutateStaff(
       ? body.name.trim()
       : "";
 
-  if (
-    name.length < 3 ||
-    name.length > 120
-  ) {
+  if (name.length < 3 || name.length > 120) {
     throw Error("Ism 3–120 belgi bo‘lsin.");
   }
 
   if (typeof body.active !== "boolean") {
     throw Error("Hisob holati noto‘g‘ri.");
+  }
+
+  const owner =
+    body.owner === undefined
+      ? targetOwner
+      : body.owner;
+
+  const adminPages = staffPages(
+    actor,
+    body.adminPages,
+    owner
+  );
+
+  if (
+    isOwner(target) &&
+    (!owner || !body.active) &&
+    !otherOwnerExists(state.users, target.id)
+  ) {
+    throw Error(
+      "Oxirgi faol administratorning huquqini olib tashlab yoki hisobini bloklab bo‘lmaydi."
+    );
   }
 
   const username = availableUsername(
@@ -254,18 +321,19 @@ export function mutateStaff(
     target.id
   );
 
-  const adminPages = validAdminPages(
-    body.adminPages
-  );
-
   Object.assign(target, {
     name,
     username,
-    adminPages,
     active: body.active,
     updatedAt: now,
     updatedBy: actor.id,
   });
+
+  if (owner) {
+    delete target.adminPages;
+  } else {
+    target.adminPages = adminPages;
+  }
 
   return { staffId: target.id };
 }

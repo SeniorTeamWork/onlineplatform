@@ -139,13 +139,25 @@ function Player({ lesson, onEnd, watermark }) {
         playsInline
         preload="metadata"
         onEnded={onEnd}
-        onError={() =>
-          setMedia({
-            key: sourceKey,
-            src: "",
-            error: "Video ochilmadi. Manzil va formatni tekshiring.",
-          })
-        }
+       onError={(event) => {
+  const video = event.currentTarget;
+  const code = video.error?.code || 0;
+
+  const messages = {
+    1: "Videoni yuklash bekor qilindi.",
+    2: "Videoni yuklashda tarmoq xatosi yuz berdi.",
+    3: "Brauzer videoni dekodlay olmadi. Fayl yoki kodekni tekshirish kerak.",
+    4: "Video manbasi yoki formati brauzer tomonidan qabul qilinmadi.",
+  };
+
+  setMedia({
+    key: sourceKey,
+    src: "",
+    error:
+      `Xato kodi: ${code}. ` +
+      (messages[code] || "Noma’lum video xatosi."),
+  });
+}}
       />
     </div>
   );

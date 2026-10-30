@@ -1,13 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Users,
+  UserCheck,
+  ShieldCheck,
+  Search,
+  Plus,
+  RefreshCw,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+
 import { Navigate } from "react-router-dom";
 
 import { useApp } from "../context/AppContext";
 import { api } from "../services/cloud";
 
 import {
-  ADMIN_PAGES,
   adminHome,
-  isOwner,
+  canAdmin,
 } from "../services/adminAccess";
 
 import AdminAccountForm from "../components/AdminAccountForm";
@@ -16,7 +31,10 @@ import Modal from "../components/Modal";
 import "./AdminStaff.css";
 
 function dateLabel(value) {
-  if (!value || !Number.isFinite(Date.parse(value))) {
+  if (
+    !value ||
+    !Number.isFinite(Date.parse(value))
+  ) {
     return "Hali qayd etilmagan";
   }
 
@@ -28,31 +46,35 @@ function dateLabel(value) {
 }
 
 export default function AdminStaff() {
-  const { user, cloud, command } = useApp();
+  const {
+    user,
+    cloud,
+    command,
+    refresh,
+    notify,
+  } = useApp();
 
-  const owner = isOwner(user);
+  const allowed = canAdmin(user, "staff");
 
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
-  const [message, setMessage] = useState("");
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [reload, setReload] = useState(0);
   const [clock, setClock] = useState(Date.now());
 
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [draft, setDraft] = useState(null);
+  const [draft, setDraft] = useState(undefined);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const receivedAt = useRef(0);
-  const actionLock = useRef(false);
+  const lock = useRef(false);
 
   useEffect(() => {
-    if (!owner || !cloud) return;
+    if (!allowed || !cloud) return;
 
     let alive = true;
     let pending = false;
@@ -71,17 +93,17 @@ export default function AdminStaff() {
       try {
         const result = await api("staffOverview");
 
-        if (!alive) return;
+        if (alive) {
+          receivedAt.current = Date.now();
 
-        receivedAt.current = Date.now();
-
-        setSnapshot(result);
-        setClock(Date.now());
-        setLoadError("");
-      } catch (error) {
+          setClock(Date.now());
+          setSnapshot(result);
+          setLoadError("");
+        }
+      } catch (err) {
         if (alive) {
           setLoadError(
-            error.message || "Xodimlar yuklanmadi."
+            err.message || "Xodimlar yuklanmadi."
           );
         }
       } finally {
@@ -109,7 +131,7 @@ export default function AdminStaff() {
         load
       );
     };
-  }, [owner, cloud, reload, user?.id]);
+  }, [allowed, cloud, reload, user?.id]);
 
   useEffect(() => {
     const timer = setInterval(
@@ -120,117 +142,36 @@ export default function AdminStaff() {
     return () => clearInterval(timer);
   }, []);
 
-  function openEdit(item) {
-    if (actionLock.current || item.owner) return;
-
-    setMessage("");
-    setActionError("");
-
-    setDraft({
-      userId: item.id,
-      name: item.name || "",
-      username: item.username || "",
-      active: item.active,
-      adminPages: item.pages.map((page) => page.id),
-    });
-  }
-
-  function changeField(key, value) {
-    setDraft((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
-  }
-
-  function togglePage(pageId) {
-    setDraft((previous) => ({
-      ...previous,
-      adminPages: previous.adminPages.includes(pageId)
-        ? previous.adminPages.filter(
-            (id) => id !== pageId
-          )
-        : [...previous.adminPages, pageId],
-    }));
-  }
-
-  async function save(event) {
-    event.preventDefault();
-
-    if (actionLock.current || !draft) return;
-
-    setActionError("");
-
-    const name = draft.name.trim();
-    const username = draft.username.trim();
-
-    if (name.length < 3 || name.length > 120) {
-      setActionError("Ism 3–120 belgi bo‘lsin.");
-      return;
-    }
-
-    if (!username) {
-      setActionError("Login kiriting.");
-      return;
-    }
-
-    if (!draft.adminPages.length) {
-      setActionError(
-        "Kamida bitta sahifani tanlang."
-      );
-      return;
-    }
-
-    actionLock.current = true;
-    setBusy(true);
-
-    try {
-      await command("editStaff", {
-        userId: draft.userId,
-        name,
-        username,
-        active: draft.active,
-        adminPages: draft.adminPages,
-      });
-
-      setDraft(null);
-      setMessage("Xodim ma’lumotlari yangilandi.");
-      setReload((value) => value + 1);
-    } catch (error) {
-      setActionError(
-        error.message || "O‘zgarishlar saqlanmadi."
-      );
-    } finally {
-      actionLock.current = false;
-      setBusy(false);
-    }
-  }
-
   async function remove() {
-    if (actionLock.current || !deleteTarget) return;
+    if (lock.current || !deleteTarget) return;
 
-    actionLock.current = true;
+    lock.current = true;
+
     setBusy(true);
     setActionError("");
 
     try {
+      await refresh();
+
       await command("deleteStaff", {
         userId: deleteTarget.id,
       });
 
       setDeleteTarget(null);
-      setMessage("Xodim ro‘yxatdan o‘chirildi.");
       setReload((value) => value + 1);
-    } catch (error) {
+
+      notify("Hisob ro‘yxatdan o‘chirildi.");
+    } catch (err) {
       setActionError(
-        error.message || "Xodim o‘chirilmadi."
+        err.message || "Hisob o‘chirilmadi."
       );
     } finally {
-      actionLock.current = false;
+      lock.current = false;
       setBusy(false);
     }
   }
 
-  if (!owner) {
+  if (!allowed) {
     return (
       <Navigate to={adminHome(user)} replace />
     );
@@ -251,7 +192,10 @@ export default function AdminStaff() {
 
   const serverNow = snapshot?.serverTime
     ? Date.parse(snapshot.serverTime) +
-      Math.max(0, clock - receivedAt.current)
+    Math.max(
+      0,
+      clock - receivedAt.current
+    )
     : clock;
 
   const staff = (snapshot?.staff || []).map(
@@ -267,24 +211,21 @@ export default function AdminStaff() {
           item.active &&
           age >= 0 &&
           age <
-            (snapshot.onlineWindowSeconds || 90) *
-              1000,
+          (snapshot.onlineWindowSeconds || 90) *
+          1000,
       };
     }
   );
 
-  const counts = {
-    total: staff.length,
-    active: staff.filter((item) => item.active).length,
-    blocked: staff.filter((item) => !item.active).length,
-    online: staff.filter((item) => item.online).length,
-  };
-
   const list = staff.filter((item) => {
-    const text = `${item.name} ${item.username}`
-      .toLowerCase();
+    const text =
+      `${item.name} ${item.username}`.toLowerCase();
 
-    if (!text.includes(query.trim().toLowerCase())) {
+    if (
+      !text.includes(
+        query.trim().toLowerCase()
+      )
+    ) {
       return false;
     }
 
@@ -300,13 +241,16 @@ export default function AdminStaff() {
       <div className="staff-heading">
         <div>
           <p className="staff-eyebrow">
-            ASOSIY ADMINISTRATOR
+            JAMOA BOSHQARUVI
           </p>
 
-          <h1>Xodimlar</h1>
+          <h1>
+            Xodimlar va administratorlar
+          </h1>
 
           <p>
-            Xodimlar, hisoblar va sahifa ruxsatlari.
+            Jamoangiz holati va har bir hisobning
+            ruxsatlarini boshqaring.
           </p>
         </div>
 
@@ -319,6 +263,7 @@ export default function AdminStaff() {
               setReload((value) => value + 1)
             }
           >
+            <RefreshCw size={16} />
             {loading
               ? "Yangilanmoqda…"
               : "Yangilash"}
@@ -328,71 +273,113 @@ export default function AdminStaff() {
             type="button"
             className="primary"
             disabled={busy}
-            onClick={() => {
-              setMessage("");
-              setAdminOpen(true);
-            }}
+            onClick={() => setDraft(null)}
           >
-            + Xodim qo‘shish
+            <Plus size={17} />
+            Yangi hisob
           </button>
         </div>
       </div>
 
       <div className="staff-stats">
         <div>
-          <span>Jami xodimlar</span>
+          <Users
+            className="staff-stat-icon"
+            size={21}
+          />
+
+          <span>Jami hisoblar</span>
+
           <strong>
-            {snapshot ? counts.total : "—"}
+            {snapshot ? staff.length : "—"}
           </strong>
-          <small>Asosiy admin ham hisoblanadi</small>
+
+          <small>
+            Asosiy admin ham hisoblanadi
+          </small>
         </div>
 
         <div className="staff-online-card">
+          <UserCheck
+            className="staff-stat-icon"
+            size={21}
+          />
+
           <span>Hozir onlayn</span>
+
           <strong>
-            {stale ? "—" : counts.online}
+            {stale
+              ? "—"
+              : staff.filter(
+                (item) => item.online
+              ).length}
           </strong>
-          <small>Oxirgi 90 soniyada faollik</small>
+
+          <small>
+            Oxirgi 90 soniyada faollik
+          </small>
         </div>
 
         <div>
+          <ShieldCheck
+            className="staff-stat-icon"
+            size={21}
+          />
+
           <span>Faol hisoblar</span>
+
           <strong>
-            {snapshot ? counts.active : "—"}
+            {snapshot
+              ? staff.filter(
+                (item) => item.active
+              ).length
+              : "—"}
           </strong>
-          <small>Saytga kirishga ruxsati bor</small>
+
+          <small>
+            Saytga kirishga ruxsati bor
+          </small>
         </div>
 
         <div>
           <span>Bloklangan hisoblar</span>
+
           <strong>
-            {snapshot ? counts.blocked : "—"}
+            {snapshot
+              ? staff.filter(
+                (item) => !item.active
+              ).length
+              : "—"}
           </strong>
-          <small>Saytga kirishi cheklangan</small>
+
+          <small>
+            Saytga kirishi cheklangan
+          </small>
         </div>
       </div>
 
       {loadError && (
-        <p className="staff-error" role="alert">
+        <div
+          className="staff-error"
+          role="alert"
+        >
           {loadError}
-        </p>
-      )}
-
-      {message && (
-        <p className="staff-info" role="status">
-          {message}
-        </p>
+        </div>
       )}
 
       <div className="staff-tools">
-        <input
-          aria-label="Xodim qidirish"
-          placeholder="Ism yoki login orqali qidiring…"
-          value={query}
-          onChange={(event) =>
-            setQuery(event.target.value)
-          }
-        />
+        <div className="staff-search">
+          <Search size={18} />
+
+          <input
+            aria-label="Xodim qidirish"
+            placeholder="Ism yoki login orqali qidiring…"
+            value={query}
+            onChange={(event) =>
+              setQuery(event.target.value)
+            }
+          />
+        </div>
 
         <select
           aria-label="Xodimlar filtri"
@@ -404,12 +391,18 @@ export default function AdminStaff() {
           <option value="all">
             Barcha xodimlar
           </option>
-          <option value="online" disabled={stale}>
+
+          <option
+            value="online"
+            disabled={stale}
+          >
             Hozir onlayn
           </option>
+
           <option value="active">
             Faol hisoblar
           </option>
+
           <option value="blocked">
             Bloklangan hisoblar
           </option>
@@ -433,23 +426,33 @@ export default function AdminStaff() {
             {list.map((item) => (
               <tr key={item.id}>
                 <td>
-                  <strong>{item.name}</strong>
-
-                  <small>
-                    {item.username
-                      ? `@${item.username}`
-                      : "Login kiritilmagan"}
-                  </small>
-
-                  {item.owner && (
-                    <span className="staff-owner">
-                      Asosiy admin
+                  <div className="staff-person">
+                    <span className="staff-avatar">
+                      {item.name
+                        .slice(0, 1)
+                        .toUpperCase()}
                     </span>
-                  )}
 
-                  {item.id === user.id && (
-                    <small>Siz</small>
-                  )}
+                    <div>
+                      <strong>{item.name}</strong>
+
+                      <small>
+                        {item.username
+                          ? `@${item.username}`
+                          : "Login kiritilmagan"}
+                      </small>
+
+                      {item.owner && (
+                        <span className="staff-owner">
+                          Asosiy admin
+                        </span>
+                      )}
+
+                      {item.id === user.id && (
+                        <small>Siz</small>
+                      )}
+                    </div>
+                  </div>
                 </td>
 
                 <td>
@@ -492,16 +495,11 @@ export default function AdminStaff() {
                       </span>
                     ))}
 
-                    {item.owner && (
-                      <span>Xodimlar</span>
+                    {!item.pages.length && (
+                      <small>
+                        Sahifa biriktirilmagan
+                      </small>
                     )}
-
-                    {!item.owner &&
-                      !item.pages.length && (
-                        <small>
-                          Sahifa biriktirilmagan
-                        </small>
-                      )}
                   </div>
                 </td>
 
@@ -511,43 +509,42 @@ export default function AdminStaff() {
                 </td>
 
                 <td>
-                  {item.owner ||
-                  item.id === user.id ? (
-                    <small>Himoyalangan hisob</small>
-                  ) : (
-                    <div
-                      className="button-row"
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                      }}
-                    >
+                  <div className="button-row">
+                    {item.canEdit && (
                       <button
                         type="button"
                         className="secondary"
                         disabled={busy}
-                        onClick={() => openEdit(item)}
+                        onClick={() =>
+                          setDraft(item)
+                        }
                       >
+                        <Pencil size={15} />
                         Tahrirlash
                       </button>
+                    )}
 
+                    {item.canDelete && (
                       <button
                         type="button"
-
                         className="secondary danger"
-                        style={{background: 'rgba(255, 0, 0, 0.13)'}}
                         disabled={busy}
                         onClick={() => {
-                          setMessage("");
                           setActionError("");
                           setDeleteTarget(item);
                         }}
                       >
+                        <Trash2 size={15} />
                         O‘chirish
                       </button>
-                    </div>
-                  )}
+                    )}
+
+                    {!item.canEdit && (
+                      <small>
+                        Himoyalangan hisob
+                      </small>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -555,8 +552,11 @@ export default function AdminStaff() {
         </table>
 
         {!list.length && (
-          <p className="staff-empty" role="status">
-            {!snapshot && loading
+          <p
+            className="staff-empty"
+            role="status"
+          >
+            {loading && !snapshot
               ? "Xodimlar yuklanmoqda…"
               : !snapshot && loadError
                 ? "Ro‘yxat yuklanmadi."
@@ -571,184 +571,39 @@ export default function AdminStaff() {
         faollik orqali aniqlanadi.
       </p>
 
-      {adminOpen && (
+      {draft !== undefined && (
         <AdminAccountForm
+          key={draft?.id || "new"}
+          staff={draft}
           onClose={() => {
-            setAdminOpen(false);
+            setDraft(undefined);
             setReload((value) => value + 1);
           }}
         />
       )}
 
-      {draft && (
-        <Modal
-          title="Xodimni tahrirlash"
-          onClose={() => {
-            if (actionLock.current) return;
-            setDraft(null);
-            setActionError("");
-          }}
-        >
-          <form
-            onSubmit={save}
-            style={{ display: "grid", gap: 16 }}
-          >
-            <label>
-              Ism
-              <input
-                required
-                minLength={3}
-                maxLength={120}
-                disabled={busy}
-                value={draft.name}
-                onChange={(event) =>
-                  changeField(
-                    "name",
-                    event.target.value
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Login
-              <input
-                required
-                autoComplete="off"
-                disabled={busy}
-                value={draft.username}
-                onChange={(event) =>
-                  changeField(
-                    "username",
-                    event.target.value
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Hisob holati
-              <select
-                disabled={busy}
-                value={
-                  draft.active
-                    ? "active"
-                    : "blocked"
-                }
-                onChange={(event) =>
-                  changeField(
-                    "active",
-                    event.target.value === "active"
-                  )
-                }
-              >
-                <option value="active">
-                  Faol
-                </option>
-                <option value="blocked">
-                  Bloklangan
-                </option>
-              </select>
-            </label>
-
-            <fieldset
-              disabled={busy}
-              style={{
-                border: "1px solid #e2e8f0",
-                borderRadius: 10,
-                padding: 16,
-              }}
-            >
-              <legend>
-                Biriktirilgan sahifalar
-              </legend>
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                {ADMIN_PAGES.map((page) => (
-                  <label
-                    key={page.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      style={{ width: "auto" }}
-                      checked={draft.adminPages.includes(
-                        page.id
-                      )}
-                      onChange={() =>
-                        togglePage(page.id)
-                      }
-                    />
-                    {page.title}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            {actionError && (
-              <p
-                className="staff-error"
-                role="alert"
-              >
-                {actionError}
-              </p>
-            )}
-
-            <div className="button-row">
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => setDraft(null)}
-              >
-                Bekor qilish
-              </button>
-
-              <button
-                type="submit"
-                className="primary"
-                disabled={busy}
-              >
-                {busy
-                  ? "Saqlanmoqda…"
-                  : "Saqlash"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
       {deleteTarget && (
         <Modal
-          title="Xodimni o‘chirish"
+          title="Hisobni o‘chirish"
           onClose={() => {
-            if (actionLock.current) return;
-            setDeleteTarget(null);
-            setActionError("");
+            if (!lock.current) {
+              setDeleteTarget(null);
+            }
           }}
         >
-          <p>
+          <div>
             <strong>{deleteTarget.name}</strong>
             {" "}ro‘yxatdan o‘chirilsinmi?
             Uning saytga kirishi bloklanadi.
-          </p>
+          </div>
 
           {actionError && (
-            <p
-              className="staff-error"
+            <div
               role="alert"
+              className="staff-error"
             >
               {actionError}
-            </p>
+            </div>
           )}
 
           <div className="button-row">
@@ -756,7 +611,9 @@ export default function AdminStaff() {
               type="button"
               className="secondary"
               disabled={busy}
-              onClick={() => setDeleteTarget(null)}
+              onClick={() =>
+                setDeleteTarget(null)
+              }
             >
               Bekor qilish
             </button>
@@ -764,7 +621,6 @@ export default function AdminStaff() {
             <button
               type="button"
               className="secondary danger"
-                        style={{background: 'rgba(255, 0, 0, 0.13)'}}
               disabled={busy}
               onClick={remove}
             >

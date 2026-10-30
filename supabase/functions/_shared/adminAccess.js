@@ -5,6 +5,16 @@ export const ADMIN_PAGES = [
     path: "/admin",
   },
   {
+    id: "statistics",
+    title: "Statistika",
+    path: "/admin/statistics",
+  },
+  {
+    id: "staff",
+    title: "Xodimlar",
+    path: "/admin/staff",
+  },
+  {
     id: "lessons",
     title: "Kurslar va darslar",
     path: "/admin/lessons",
@@ -36,20 +46,21 @@ export const ADMIN_PAGES = [
   },
 ];
 
-const equal = (first, second) =>
-  JSON.stringify(first) === JSON.stringify(second);
+const equal = (a, b) =>
+  JSON.stringify(a) === JSON.stringify(b);
 
 function assert(
-  condition,
+  value,
   message = "Ushbu amal uchun ruxsat yo‘q."
 ) {
-  if (!condition) throw Error(message);
+  if (!value) throw Error(message);
 }
 
 export function isOwner(user) {
   return (
     user?.role === "admin" &&
     user.active === true &&
+    !user.deletedAt &&
     !Object.prototype.hasOwnProperty.call(
       user,
       "adminPages"
@@ -57,16 +68,17 @@ export function isOwner(user) {
   );
 }
 
-export function canAdmin(user, pageId) {
+export function canAdmin(user, page) {
   return (
     user?.role === "admin" &&
     user.active === true &&
-    ADMIN_PAGES.some((page) => page.id === pageId) &&
+    !user.deletedAt &&
+    ADMIN_PAGES.some((item) => item.id === page) &&
     (
       isOwner(user) ||
       (
         Array.isArray(user.adminPages) &&
-        user.adminPages.includes(pageId)
+        user.adminPages.includes(page)
       )
     )
   );
@@ -80,17 +92,24 @@ export function adminHome(user) {
   );
 }
 
-export function validAdminPages(pages) {
+export function validAdminPages(pages, actor) {
   assert(
     Array.isArray(pages) &&
-      pages.length > 0 &&
-      pages.every(
-        (id) =>
-          typeof id === "string" &&
-          ADMIN_PAGES.some((page) => page.id === id)
-      ),
+    pages.length > 0 &&
+    pages.every(
+      (id) =>
+        typeof id === "string" &&
+        ADMIN_PAGES.some((page) => page.id === id)
+    ),
     "Kamida bitta mavjud sahifani tanlang."
   );
+
+  if (actor) {
+    assert(
+      pages.every((id) => canAdmin(actor, id)),
+      "O‘zingizda yo‘q ruxsatni bera olmaysiz."
+    );
+  }
 
   return [...new Set(pages)];
 }
@@ -102,22 +121,21 @@ function any(user, pages) {
 export function checkAdminAction(user, action) {
   assert(
     user?.role === "admin" &&
-    user.active === true
+    user.active === true &&
+    !user.deletedAt
   );
 
-  if (action === "createAdmin") {
-    assert(
-      isOwner(user),
-      "Yangi adminni faqat asosiy admin yaratishi mumkin."
-    );
-
-    return;
-  }
-
   const permissions = {
+    createAdmin: ["staff"],
+    staffOverview: ["staff"],
+    editStaff: ["staff"],
+    deleteStaff: ["staff"],
+
     student: ["students"],
+    deleteStudent: ["students"],
     setPassword: ["students"],
     adminNote: ["students"],
+
     markTrialsSeen: ["dashboard", "trials"],
   };
 
@@ -127,6 +145,10 @@ export function checkAdminAction(user, action) {
 }
 
 const PAGE_DATA = {
+  staff: [],
+
+  statistics: ["payments"],
+
   dashboard: [
     "users",
     "courses",
@@ -184,10 +206,7 @@ const PAGE_DATA = {
     "submissions",
   ],
 
-  support: [
-    "users",
-    "tickets",
-  ],
+  support: ["users", "tickets"],
 };
 
 const TABLES = [
@@ -300,8 +319,9 @@ export function adminUpdate(state, user, next) {
 }
 
 export function adminCanReadFile(state, user, path) {
-  if (isOwner(user)) return true;
-  if (user.avatarId === path) return true;
+  if (isOwner(user) || user.avatarId === path) {
+    return true;
+  }
 
   const visible = adminView(state, user);
 
@@ -313,12 +333,41 @@ export function adminCanReadFile(state, user, path) {
       (lesson) =>
         lesson.fileId === path ||
         lesson.materials?.some(
-          (material) => material.fileId === path
+          (file) => file.fileId === path
         )
     ) ||
     visible.submissions.some(
-      (submission) =>
-        submission.attachment?.fileId === path
+      (item) => item.attachment?.fileId === path
+    )
+  );
+}
+
+export function canEditStaff(actor, target) {
+  if (
+    !canAdmin(actor, "staff") ||
+    !target ||
+    target.role !== "admin" ||
+    target.deletedAt
+  ) {
+    return false;
+  }
+
+  if (isOwner(actor)) return true;
+
+  if (
+    target.id === actor.id ||
+    !Object.prototype.hasOwnProperty.call(
+      target,
+      "adminPages"
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    Array.isArray(target.adminPages) &&
+    target.adminPages.every((id) =>
+      canAdmin(actor, id)
     )
   );
 }

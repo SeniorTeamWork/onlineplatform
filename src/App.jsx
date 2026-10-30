@@ -18,6 +18,9 @@ import StudentDetail from "./pages/StudentDetail";
 import Finance from "./pages/Finance";
 import AdminStaff from "./pages/AdminStaff";
 
+import Statistics from "./components/Statistics";
+
+
 function Protected({ role }) {
   const { user } = useApp();
   if (!user) return <Navigate to="/login" replace />;
@@ -122,9 +125,18 @@ export default function App() {
           <Route
             path="staff"
             element={
-              <OwnerPage>
+              <AdminPage page="staff">
                 <AdminStaff />
-              </OwnerPage>
+              </AdminPage>
+            }
+          />
+
+          <Route
+            path="statistics"
+            element={
+              <AdminPage page="statistics">
+                <Statistics />
+              </AdminPage>
             }
           />
           <Route

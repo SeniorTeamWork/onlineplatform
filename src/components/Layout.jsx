@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { enrollmentsFor } from "../services/db";
-import { canAdmin, adminHome, isOwner } from "../services/adminAccess";
+import { canAdmin, adminHome } from "../services/adminAccess";
 import useStaffPresence from "../hooks/useStaffPresence";
 import Modal from "./Modal";
 import "./Layout.css";
@@ -30,7 +30,7 @@ import "./Layout.css";
 export function Brand() {
   return (
     <div className="brand">
-      <span>AI</span> Academy
+      <span>IT TAT</span> 
     </div>
   );
 }
@@ -68,15 +68,64 @@ export default function Layout() {
     navigate(home);
   }
   const adminLinks = [
-    ["/admin", LayoutDashboard, "Umumiy ko‘rinish", "dashboard"],
-    ["/admin/lessons", Clapperboard, "Kurslar va darslar", "lessons"],
-    ["/admin/students", Users, "Talabalar", "students"],
-    ["/admin/finance", Wallet, "Moliya", "finance"],
-    ["/admin/reviews", ClipboardCheck, "Amaliy ishlar", "reviews"],
-    ["/admin/support", MessageSquare, "Murojaatlar", "support"],
-    ["/admin/trials", Users, "Sinovdagi talabalar", "trials"],
-  ].filter(([, , , page]) => canAdmin(user, page));
-  if (isOwner(user)) adminLinks.push(["/admin/staff", UserRound, "Xodimlar"]);
+  [
+    "/admin",
+    LayoutDashboard,
+    "Umumiy ko‘rinish",
+    "dashboard",
+  ],
+  [
+    "/admin/statistics",
+    LayoutDashboard,
+    "Statistika",
+    "statistics",
+  ],
+  [
+    "/admin/staff",
+    UserRound,
+    "Xodimlar",
+    "staff",
+  ],
+  [
+    "/admin/lessons",
+    Clapperboard,
+    "Kurslar va darslar",
+    "lessons",
+  ],
+  [
+    "/admin/students",
+    Users,
+    "Talabalar",
+    "students",
+  ],
+  [
+    "/admin/finance",
+    Wallet,
+    "Moliya",
+    "finance",
+  ],
+  [
+    "/admin/reviews",
+    ClipboardCheck,
+    "Amaliy ishlar",
+    "reviews",
+  ],
+  [
+    "/admin/support",
+    MessageSquare,
+    "Murojaatlar",
+    "support",
+  ],
+  [
+    "/admin/trials",
+    Users,
+    "Sinovdagi talabalar",
+    "trials",
+  ],
+].filter(([, , , page]) =>
+  canAdmin(user, page)
+);
+ 
   const studentLinks = [
     ["/student", BookOpen, "Mening kurslarim"],
     ["/student/certificate", Award, "Sertifikatlar"],

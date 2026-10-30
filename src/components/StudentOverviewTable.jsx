@@ -1,7 +1,16 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { useApp } from "../context/AppContext";
 import { money } from "../services/db";
-import { studentOverview } from "../services/adminOverview";
+
+import {
+  canAdmin,
+} from "../services/adminAccess";
+
+import {
+  studentOverview,
+} from "../services/adminOverview";
 
 import useFiveStudentScroll from "../hooks/useFiveStudentScroll";
 
@@ -12,6 +21,21 @@ export default function StudentOverviewTable({
   limitRows = false,
   highlightPayments = false,
 }) {
+  const {
+    user,
+    cloud,
+    command,
+    update,
+    refresh,
+    notify,
+    saving,
+  } = useApp();
+
+  const [deleting, setDeleting] = useState(null);
+  const lock = useRef(false);
+
+  const canDelete = canAdmin(user, "students");
+
   const scrollRef = useFiveStudentScroll(
     JSON.stringify([
       limitRows,
@@ -19,12 +43,91 @@ export default function StudentOverviewTable({
     ])
   );
 
+  async function remove(student) {
+    if (
+      !canDelete ||
+      saving ||
+      lock.current
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `“${student.name}” talabani ro‘yxatdan o‘chirasizmi? ` +
+      "Saytga kirishi bloklanadi. " +
+      "To‘lov va o‘qish tarixi saqlanadi."
+    );
+
+    if (!confirmed) return;
+
+    lock.current = true;
+    setDeleting(student.id);
+
+    try {
+      if (cloud) {
+        await refresh();
+
+        await command("deleteStudent", {
+          userId: student.id,
+        });
+      } else {
+        const saved = await update((state) => {
+          const target = state.users.find(
+            (item) =>
+              item.id === student.id &&
+              item.role === "student"
+          );
+
+          if (!target) {
+            throw Error("Talaba topilmadi.");
+          }
+
+          Object.assign(target, {
+            role: "deleted",
+            deletedRole: "student",
+            active: false,
+            deletedAt: new Date().toISOString(),
+            deletedBy: user.id,
+          });
+
+          for (
+            const [key, session] of
+            Object.entries(
+              state.testSessions || {}
+            )
+          ) {
+            if (
+              session?.userId === student.id
+            ) {
+              delete state.testSessions[key];
+            }
+          }
+        });
+
+        if (!saved) return;
+      }
+
+      notify("Talaba ro‘yxatdan o‘chirildi.");
+    } catch (error) {
+      notify(
+        error.message || "Talaba o‘chirilmadi."
+      );
+    } finally {
+      lock.current = false;
+      setDeleting(null);
+    }
+  }
+
   return (
     <div
       ref={limitRows ? scrollRef : undefined}
       className={
         "panel table-scroll" +
-        (limitRows ? " five-student-scroll" : "")
+        (
+          limitRows
+            ? " five-student-scroll"
+            : ""
+        )
       }
     >
       <table>
@@ -38,7 +141,9 @@ export default function StudentOverviewTable({
             <th>Darslar</th>
             <th>Hisob holati</th>
 
-            {onEdit && <th>Amal</th>}
+            {(onEdit || canDelete) && (
+              <th>Amallar</th>
+            )}
           </tr>
         </thead>
 
@@ -49,35 +154,35 @@ export default function StudentOverviewTable({
               student
             );
 
-            const fullyPaid =
+            const paid =
               summary.courses.length > 0 &&
               summary.totals.fee > 0 &&
               summary.totals.debt === 0 &&
-              summary.totals.paid >= summary.totals.fee;
+              summary.totals.paid >=
+                summary.totals.fee;
 
             const paidClass =
-              highlightPayments && fullyPaid
+              highlightPayments && paid
                 ? "finance-amount finance-amount--paid"
                 : "";
 
-            let debtClass = "";
-
-            if (highlightPayments) {
-              if (summary.totals.debt > 0) {
-                debtClass =
-                  "finance-amount finance-amount--debt";
-              } else if (fullyPaid) {
-                debtClass =
-                  "finance-amount finance-amount--paid";
-              }
-            }
+            const debtClass = highlightPayments
+              ? summary.totals.debt > 0
+                ? "finance-amount finance-amount--debt"
+                : paid
+                  ? "finance-amount finance-amount--paid"
+                  : ""
+              : "";
 
             return (
               <tr key={student.id}>
                 <td>
                   <Link
                     className="purple"
-                    to={"/admin/students/" + student.id}
+                    to={
+                      "/admin/students/" +
+                      student.id
+                    }
                   >
                     {student.name} →
                   </Link>
@@ -113,25 +218,56 @@ export default function StudentOverviewTable({
                 </td>
 
                 <td>
-                  {summary.completed} / {summary.total}
-                  {" "}yakunlangan
+                  {summary.completed} /{" "}
+                  {summary.total} yakunlangan
 
                   <small>
-                    {summary.watched} ta video ko‘rilgan
+                    {summary.watched} ta video
+                    ko‘rilgan
                   </small>
                 </td>
 
-                <td>{summary.accountStatus}</td>
+                <td>
+                  {summary.accountStatus}
+                </td>
 
-                {onEdit && (
+                {(onEdit || canDelete) && (
                   <td>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => onEdit(student)}
-                    >
-                      Tahrirlash
-                    </button>
+                    <div className="button-row">
+                      {onEdit && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={
+                            deleting !== null ||
+                            saving
+                          }
+                          onClick={() =>
+                            onEdit(student)
+                          }
+                        >
+                          Tahrirlash
+                        </button>
+                      )}
+
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className="secondary danger"
+                          disabled={
+                            deleting !== null ||
+                            saving
+                          }
+                          onClick={() =>
+                            remove(student)
+                          }
+                        >
+                          {deleting === student.id
+                            ? "O‘chirilmoqda…"
+                            : "O‘chirish"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
@@ -144,7 +280,7 @@ export default function StudentOverviewTable({
         <p className="empty">
           Talabalar topilmadi.
         </p>
-      )}
+      )}a
     </div>
   );
 }

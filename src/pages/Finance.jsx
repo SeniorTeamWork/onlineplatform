@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  canAdmin,
+} from "../services/adminAccess";
+
+
 import Statistics from "../components/Statistics";
 
 import { useApp } from "../context/AppContext";
@@ -26,7 +31,7 @@ function amountClass(debt, fullyPaid) {
 }
 
 export default function Finance() {
-  const { data } = useApp();
+  const { data, user } = useApp();
 
   const [status, setStatus] = useState("all");
   const [studentId] = useState("");
@@ -117,6 +122,11 @@ export default function Finance() {
           <h1>Moliya</h1>
         </div>
       </div>
+
+
+{canAdmin(user, "statistics") && (
+  <>
+
 
       <div className="stats">
         <div className="panel stat">
@@ -249,6 +259,9 @@ export default function Finance() {
           </table>
         </div>
       </section>
+
+        </>
+)}
 
       <section className="panel detail-panel">
         <h2>Talabalar</h2>

@@ -1207,8 +1207,11 @@ main {
 
 }
 
-.modal p{
+/* .modal p{
   display: none ;
+} */
+.modal [role="alert"] {
+  display: block;
 }
 
 /* Animatsiyani kamaytirish */

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { money } from "../services/db";
 import { calendarStatistics } from "../services/calendarStatistics";
+import { canAdmin } from "../services/adminAccess";
 
 import "./Statistics.css";
 
@@ -37,11 +38,17 @@ function shortMoney(value) {
 }
 
 export default function Statistics() {
-  const { data } = useApp();
+  const { data, user } = useApp();
 
   const [period, setPeriod] = useState("week");
 
+  if (!canAdmin(user, "statistics")) {
+    return null;
+  }
+
   const stats = calendarStatistics(data, period);
+
+  // Qolgan mavjud kod shu yerdan davom etadi.
 
   const largestAmount = Math.max(
     0,

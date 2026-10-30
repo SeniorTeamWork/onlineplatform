@@ -2,6 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Wallet } from "lucide-react";
 
+
+import {
+  canAdmin,
+} from "../services/adminAccess";
+
+
 import { useApp } from "../context/AppContext";
 
 import {
@@ -189,31 +195,30 @@ export default function Admin() {
         </div>
       </div>
 
-      <div className="stats">
-        {cards.map(([number, title, to]) => (
-          <Link
-            className="panel stat"
-            key={title}
-            to={to}
-          >
-            <strong style={{ fontSize: "30px" }}>
-              {number}
-            </strong>
+     {canAdmin(user, "statistics") && (
+  <div className="stats">
+    {cards.map(([number, title, to]) => (
+      <Link
+        className="panel stat"
+        key={title}
+        to={to}
+      >
+        <strong style={{ fontSize: "30px" }}>
+          {number}
+        </strong>
 
-            <span>{title} →</span>
+        <span>{title} →</span>
 
-            {title === "Sinovdagi talabalar" &&
-              unseenCount > 0 && (
-                <span
-                  className="badge"
-                  role="status"
-                >
-                  🔔 {unseenCount} ta yangi talaba
-                </span>
-              )}
-          </Link>
-        ))}
-      </div>
+        {title === "Sinovdagi talabalar" &&
+          unseenCount > 0 && (
+            <span className="badge" role="status">
+              🔔 {unseenCount} ta yangi talaba
+            </span>
+          )}
+      </Link>
+    ))}
+  </div>
+)}
 
       <Statistics />
 

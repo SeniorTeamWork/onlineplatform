@@ -1,15 +1,25 @@
-import { applyLessonDeletion } from "../_shared/deleteLesson.js";
-
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+import {
+  deleteStudent,
+} from "../_shared/deleteStudent.js";
+
+import {
+  applyLessonDeletion,
+} from "../_shared/deleteLesson.js";
 
 import {
   staffAction,
   mutateStaff,
+  staffPages,
 } from "../_shared/staff.js";
 
 import {
   availableUsername,
 } from "../_shared/identity.js";
+
+
+
 
 import {
   view,
@@ -24,7 +34,7 @@ import {
   adminCanReadFile,
   checkAdminAction,
   canAdmin,
-  validAdminPages,
+   canEditStaff,
 } from "../_shared/adminAccess.js";
 
 import * as D from "../_shared/domain.js";
@@ -48,14 +58,15 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-const response = (
+function response(
   value: unknown,
   status = 200
-) =>
-  new Response(JSON.stringify(value), {
+) {
+  return new Response(JSON.stringify(value), {
     status,
     headers,
   });
+}
 
 function must(
   value: unknown,
@@ -64,7 +75,10 @@ function must(
   if (!value) throw Error(message);
 }
 
-function clientView(state: any, user: any) {
+function clientView(
+  state: any,
+  user: any
+) {
   const result =
     user.role === "admin"
       ? adminView(state, user)
@@ -115,6 +129,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
+    // LOGIN
     if (body.action === "login") {
       const invalid =
         "Login yoki parol noto‘g‘ri, yoki hisob faol emas.";
@@ -147,18 +162,22 @@ Deno.serve(async (req) => {
       const account = loaded.data.data.users.find(
         (user: any) =>
           login.includes("@")
-            ? String(user.email || "").toLowerCase() ===
-              login
-            : String(user.username || "").toLowerCase() ===
-              login
+            ? String(
+                user.email || ""
+              ).toLowerCase() === login
+            : String(
+                user.username || ""
+              ).toLowerCase() === login
       );
 
       const actual = account
-        ? await db.auth.admin.getUserById(account.id)
+        ? await db.auth.admin.getUserById(
+            account.id
+          )
         : null;
 
-      const signed =
-        await authClient().auth.signInWithPassword({
+      const signed = await authClient()
+        .auth.signInWithPassword({
           email:
             actual?.data?.user?.email ||
             "unknown-account@academy.invalid",
@@ -183,6 +202,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    // SESSIYA
     const token = req.headers
       .get("Authorization")
       ?.replace(/^Bearer /i, "");
@@ -199,6 +219,7 @@ Deno.serve(async (req) => {
       "Sessiya tugagan. Qayta kiring."
     );
 
+    // BAZADAGI MA’LUMOTLAR
     const {
       data: row,
       error: loadError,
@@ -230,20 +251,20 @@ Deno.serve(async (req) => {
       checkAdminAction(user, body.action);
     }
 
+    // XODIMLAR FAOLLIGI REVISION TALAB QILMAYDI
     if (
-  body.action === "staffHeartbeat" ||
-  body.action === "staffOverview"
-) {
-  const result = await staffAction(
-    db,
-    state,
-    user,
-    body.action
-  );
+      body.action === "staffHeartbeat" ||
+      body.action === "staffOverview"
+    ) {
+      const result = await staffAction(
+        db,
+        state,
+        user,
+        body.action
+      );
 
-  return response(result);
-}
-
+      return response(result);
+    }
 
     const emailChanged =
       user.email !== auth.user!.email;
@@ -252,6 +273,7 @@ Deno.serve(async (req) => {
       user.email = auth.user!.email;
     }
 
+    // MA’LUMOTLARNI O‘QISH
     if (body.action === "read") {
       let revision = row.revision;
 
@@ -277,6 +299,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    // FAYL YUKLASHGA RUXSAT
     if (body.action === "upload") {
       const ext = String(body.name)
         .split(".")
@@ -296,7 +319,9 @@ Deno.serve(async (req) => {
         admin &&
         (
           video ||
-          ["pdf", "xls", "xlsx"].includes(ext || "")
+          ["pdf", "xls", "xlsx"].includes(
+            ext || ""
+          )
         )
       ) {
         must(canAdmin(user, "lessons"));
@@ -359,6 +384,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    // VIDEO VA MATERIALLARNI OCHISH
     if (body.action === "media") {
       must(
         typeof body.path === "string" &&
@@ -379,7 +405,8 @@ Deno.serve(async (req) => {
 
       const owner = state.users.find(
         (account: any) =>
-          account.id === body.path.split("/")[0]
+          account.id ===
+          body.path.split("/")[0]
       );
 
       const bucket =
@@ -398,6 +425,55 @@ Deno.serve(async (req) => {
       });
     }
 
+
+
+
+    
+if (body.action === "setStaffPassword") {
+  const target = state.users.find(
+    (account: any) =>
+      account.id === body.userId &&
+      account.role === "admin" &&
+      !account.deletedAt
+  );
+
+  must(target, "Xodim topilmadi.");
+
+  must(
+    admin && canEditStaff(user, target),
+    "Bu xodimning parolini o‘zgartirishga ruxsat yo‘q."
+  );
+
+  must(
+    typeof body.password === "string" &&
+      body.password.length >= 8 &&
+      body.password.length <= 128,
+    "Yangi parol 8–128 belgi bo‘lsin."
+  );
+
+  const changed =
+    await db.auth.admin.updateUserById(
+      target.id,
+      {
+        password: body.password,
+      }
+    );
+
+  if (changed.error) throw changed.error;
+
+  must(
+    changed.data.user?.id === target.id,
+    "Auth hisobi mos kelmadi."
+  );
+
+  return response({
+    ok: true,
+    userId: target.id,
+  });
+}
+
+
+    // TALABA PAROLINI O‘ZGARTIRISH
     if (body.action === "setPassword") {
       must(admin);
 
@@ -419,7 +495,9 @@ Deno.serve(async (req) => {
       const changed =
         await db.auth.admin.updateUserById(
           target.id,
-          { password: body.password }
+          {
+            password: body.password,
+          }
         );
 
       if (changed.error) throw changed.error;
@@ -436,6 +514,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    // YOZISH AMALLARI UCHUN REVISION
     must(
       body.revision === row.revision,
       "Ma’lumot yangilangan. Sahifani yangilab, qayta saqlang."
@@ -443,25 +522,43 @@ Deno.serve(async (req) => {
 
     let result: any;
 
+    // XODIM / ADMINISTRATORNI TAHRIRLASH VA O‘CHIRISH
     if (
-  body.action === "editStaff" ||
-  body.action === "deleteStaff"
-) {
-  result = mutateStaff(
-    state,
-    user,
-    body.action,
-    body
-  );
-} else if (body.action === "deleteLesson") {
+      body.action === "editStaff" ||
+      body.action === "deleteStaff"
+    ) {
+      result = mutateStaff(
+        state,
+        user,
+        body.action,
+        body
+      );
+    }
+
+    // TALABANI O‘CHIRISH
+    else if (body.action === "deleteStudent") {
+      result = deleteStudent(
+        state,
+        user,
+        body.userId
+      );
+    }
+
+    // DARSNI O‘CHIRISH
+    else if (body.action === "deleteLesson") {
       must(
         admin && canAdmin(user, "lessons"),
         "Darsni o‘chirish uchun kurslar va darslar bo‘limiga ruxsat kerak."
       );
 
-      result = applyLessonDeletion(state, body.lessonId);
+      result = applyLessonDeletion(
+        state,
+        body.lessonId
+      );
     }
-     else if (body.action === "watchLesson") {
+
+    // VIDEO KO‘RILGANINI SAQLASH
+    else if (body.action === "watchLesson") {
       must(
         !admin &&
           D.unlocked(
@@ -478,7 +575,10 @@ Deno.serve(async (req) => {
         watched: true,
         watchedAt: new Date().toISOString(),
       };
-    } else if (body.action === "submitTest") {
+    }
+
+    // TEST TOPSHIRISH
+    else if (body.action === "submitTest") {
       must(
         !admin &&
           D.unlocked(
@@ -505,11 +605,16 @@ Deno.serve(async (req) => {
         session,
         body.answers || {}
       );
-    } else if (body.action === "createAdmin") {
+    }
+
+    // XODIM YOKI ASOSIY ADMINISTRATOR YARATISH
+    else if (body.action === "createAdmin") {
       must(admin);
 
-      const adminPages = validAdminPages(
-        body.adminPages
+      const adminPages = staffPages(
+        user,
+        body.adminPages,
+        body.owner ?? false
       );
 
       const username = availableUsername(
@@ -519,14 +624,16 @@ Deno.serve(async (req) => {
 
       must(
         typeof body.name === "string" &&
-          body.name.trim().length >= 3,
-        "Ism kamida 3 belgi bo‘lsin."
+          body.name.trim().length >= 3 &&
+          body.name.trim().length <= 120,
+        "Ism 3–120 belgi bo‘lsin."
       );
 
       must(
         typeof body.password === "string" &&
-          body.password.length >= 8,
-        "Parol kamida 8 belgi bo‘lsin."
+          body.password.length >= 8 &&
+          body.password.length <= 128,
+        "Parol 8–128 belgi bo‘lsin."
       );
 
       const email =
@@ -551,10 +658,17 @@ Deno.serve(async (req) => {
         email,
         role: "admin",
         active: true,
-        adminPages,
+
+        ...(adminPages === null
+          ? {}
+          : { adminPages }),
+
         createdAt: new Date().toISOString(),
       });
-    } else if (
+    }
+
+    // ADMIN IZOHI / SINOV TALABALARINI BELGILASH
+    else if (
       body.action === "adminNote" ||
       body.action === "markTrialsSeen"
     ) {
@@ -564,25 +678,30 @@ Deno.serve(async (req) => {
         body.action,
         body
       );
-    } else if (body.action === "update") {
+    }
+
+    // ODDIY MA’LUMOT YANGILASH
+    else if (body.action === "update") {
       if (!admin) {
         for (
           const submission of
           body.next.submissions || []
         ) {
-          const existing = state.submissions.some(
-            (item: any) =>
-              item.id === submission.id
-          );
+          const existing =
+            state.submissions.some(
+              (item: any) =>
+                item.id === submission.id
+            );
 
           if (
             !existing &&
             submission.attachment
           ) {
             must(
-              submission.attachment.fileId.startsWith(
-                user.id + "/uploads/"
-              )
+              submission.attachment.fileId
+                .startsWith(
+                  user.id + "/uploads/"
+                )
             );
           }
         }
@@ -605,7 +724,10 @@ Deno.serve(async (req) => {
             )
           : body.next
       );
-    } else if (body.action === "student") {
+    }
+
+    // TALABA QO‘SHISH / TAHRIRLASH
+    else if (body.action === "student") {
       must(admin);
 
       const {
@@ -621,7 +743,7 @@ Deno.serve(async (req) => {
 
       must(
         !existing ||
-        existing.role === "student"
+          existing.role === "student"
       );
 
       const username = availableUsername(
@@ -697,7 +819,10 @@ Deno.serve(async (req) => {
       result = {
         studentId: clean.id,
       };
-    } else if (body.action === "profile") {
+    }
+
+    // SHAXSIY PROFIL
+    else if (body.action === "profile") {
       const fields = body.fields;
 
       const username = availableUsername(
@@ -706,8 +831,8 @@ Deno.serve(async (req) => {
         user.id
       );
 
-      const verified =
-        await authClient().auth.signInWithPassword({
+      const verified = await authClient()
+        .auth.signInWithPassword({
           email: user.email,
           password: String(
             fields.currentPassword || ""
@@ -720,11 +845,15 @@ Deno.serve(async (req) => {
         "Joriy parol noto‘g‘ri."
       );
 
-      must(fields.name?.trim().length >= 3);
+      must(
+        fields.name?.trim().length >= 3
+      );
 
       must(
         !fields.phone ||
-          /^\+?[0-9 ()-]{7,20}$/.test(fields.phone)
+          /^\+?[0-9 ()-]{7,20}$/.test(
+            fields.phone
+          )
       );
 
       if (fields.avatarId) {
@@ -744,7 +873,10 @@ Deno.serve(async (req) => {
           ? { avatarId: fields.avatarId }
           : {}),
       });
-    } else if (body.action === "certificate") {
+    }
+
+    // SERTIFIKAT
+    else if (body.action === "certificate") {
       result = {
         certificate: D.issueCertificate(
           state,
@@ -752,10 +884,13 @@ Deno.serve(async (req) => {
           body.courseId
         ),
       };
-    } else {
+    }
+
+    else {
       throw Error("Noma’lum amal.");
     }
 
+    // O‘ZGARISHLARNI SAQLASH
     const {
       data: revision,
       error,
@@ -777,14 +912,18 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     if (createdId) {
-      await db.auth.admin.deleteUser(createdId);
+      await db.auth.admin.deleteUser(
+        createdId
+      );
     }
 
     return response(
       {
         error:
-          error instanceof Error
-            ? error.message
+          error &&
+          typeof error === "object" &&
+          "message" in error
+            ? String(error.message)
             : "Server xatosi",
       },
       400
