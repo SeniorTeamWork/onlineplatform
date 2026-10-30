@@ -1,42 +1,26 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-import {
-  deleteStudent,
-} from "../_shared/deleteStudent.js";
-
-import {
-  applyLessonDeletion,
-} from "../_shared/deleteLesson.js";
-
+import { deleteStudent } from "../_shared/deleteStudent.js";
+import { applyLessonDeletion } from "../_shared/deleteLesson.js";
 import {
   staffAction,
   mutateStaff,
   staffPages,
 } from "../_shared/staff.js";
-
-import {
-  availableUsername,
-} from "../_shared/identity.js";
-
-
-
-
+import { availableUsername } from "../_shared/identity.js";
 import {
   view,
   applyUpdate,
   mayReadFile,
   applyAdminAction,
 } from "../_shared/logic.js";
-
 import {
   adminView,
   adminUpdate,
   adminCanReadFile,
   checkAdminAction,
   canAdmin,
-   canEditStaff,
+  canEditStaff,
 } from "../_shared/adminAccess.js";
-
 import * as D from "../_shared/domain.js";
 
 const db = createClient(
@@ -47,7 +31,7 @@ const db = createClient(
       persistSession: false,
       autoRefreshToken: false,
     },
-  }
+  },
 );
 
 const headers = {
@@ -58,27 +42,17 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-function response(
-  value: unknown,
-  status = 200
-) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers,
-  });
-}
+const response = (value: unknown, status = 200) =>
+  new Response(JSON.stringify(value), { status, headers });
 
 function must(
   value: unknown,
-  message = "Ruxsat berilmagan."
+  message = "Ruxsat berilmagan.",
 ) {
   if (!value) throw Error(message);
 }
 
-function clientView(
-  state: any,
-  user: any
-) {
+function clientView(state: any, user: any) {
   const result =
     user.role === "admin"
       ? adminView(state, user)
@@ -87,11 +61,11 @@ function clientView(
   if (user.role !== "admin") {
     result.lessons.forEach((lesson: any) => {
       const original = state.lessons.find(
-        (item: any) => item.id === lesson.id
+        (item: any) => item.id === lesson.id,
       );
 
       lesson.hasVideo = Boolean(
-        original?.fileId || original?.video
+        original?.fileId || original?.video,
       );
     });
   }
@@ -108,7 +82,7 @@ function authClient() {
         persistSession: false,
         autoRefreshToken: false,
       },
-    }
+    },
   );
 }
 
@@ -118,10 +92,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return response(
-      { error: "POST required" },
-      405
-    );
+    return response({ error: "POST required" }, 405);
   }
 
   let createdId: string | undefined;
@@ -129,7 +100,6 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
-    // LOGIN
     if (body.action === "login") {
       const invalid =
         "Login yoki parol noto‘g‘ri, yoki hisob faol emas.";
@@ -144,7 +114,7 @@ Deno.serve(async (req) => {
           typeof body.password === "string" &&
           body.password.length > 0 &&
           body.password.length <= 4096,
-        invalid
+        invalid,
       );
 
       const loaded = await db
@@ -154,30 +124,22 @@ Deno.serve(async (req) => {
         .single();
 
       if (loaded.error) {
-        throw Error(
-          "Kirish xizmati vaqtincha mavjud emas."
-        );
+        throw Error("Kirish xizmati vaqtincha mavjud emas.");
       }
 
       const account = loaded.data.data.users.find(
-        (user: any) =>
+        (item: any) =>
           login.includes("@")
-            ? String(
-                user.email || ""
-              ).toLowerCase() === login
-            : String(
-                user.username || ""
-              ).toLowerCase() === login
+            ? String(item.email || "").toLowerCase() === login
+            : String(item.username || "").toLowerCase() === login,
       );
 
       const actual = account
-        ? await db.auth.admin.getUserById(
-            account.id
-          )
+        ? await db.auth.admin.getUserById(account.id)
         : null;
 
-      const signed = await authClient()
-        .auth.signInWithPassword({
+      const signed =
+        await authClient().auth.signInWithPassword({
           email:
             actual?.data?.user?.email ||
             "unknown-account@academy.invalid",
@@ -189,20 +151,17 @@ Deno.serve(async (req) => {
           signed.data.session &&
           account?.active &&
           signed.data.user?.id === account.id,
-        invalid
+        invalid,
       );
 
       return response({
         session: {
-          access_token:
-            signed.data.session!.access_token,
-          refresh_token:
-            signed.data.session!.refresh_token,
+          access_token: signed.data.session!.access_token,
+          refresh_token: signed.data.session!.refresh_token,
         },
       });
     }
 
-    // SESSIYA
     const token = req.headers
       .get("Authorization")
       ?.replace(/^Bearer /i, "");
@@ -216,10 +175,9 @@ Deno.serve(async (req) => {
 
     must(
       !authError && auth.user,
-      "Sessiya tugagan. Qayta kiring."
+      "Sessiya tugagan. Qayta kiring.",
     );
 
-    // BAZADAGI MA’LUMOTLAR
     const {
       data: row,
       error: loadError,
@@ -232,17 +190,15 @@ Deno.serve(async (req) => {
     if (loadError) throw loadError;
 
     const state = row.data;
-
     state.expenses ??= [];
 
     const user = state.users.find(
-      (account: any) =>
-        account.id === auth.user!.id
+      (account: any) => account.id === auth.user!.id,
     );
 
     must(
       user?.active,
-      "Hisob faol emas yoki admin tomonidan biriktirilmagan."
+      "Hisob faol emas yoki admin tomonidan biriktirilmagan.",
     );
 
     const admin = user.role === "admin";
@@ -251,45 +207,33 @@ Deno.serve(async (req) => {
       checkAdminAction(user, body.action);
     }
 
-    // XODIMLAR FAOLLIGI REVISION TALAB QILMAYDI
     if (
       body.action === "staffHeartbeat" ||
       body.action === "staffOverview"
     ) {
-      const result = await staffAction(
-        db,
-        state,
-        user,
-        body.action
+      return response(
+        await staffAction(db, state, user, body.action),
       );
-
-      return response(result);
     }
 
-    const emailChanged =
-      user.email !== auth.user!.email;
+    const emailChanged = user.email !== auth.user!.email;
 
     if (emailChanged) {
       user.email = auth.user!.email;
     }
 
-    // MA’LUMOTLARNI O‘QISH
     if (body.action === "read") {
       let revision = row.revision;
 
       if (emailChanged) {
-        const saved = await db.rpc(
-          "academy_commit",
-          {
-            expected: row.revision,
-            document: state,
-            actor: user.id,
-            operation: "sync-email",
-          }
-        );
+        const saved = await db.rpc("academy_commit", {
+          expected: row.revision,
+          document: state,
+          actor: user.id,
+          operation: "sync-email",
+        });
 
         if (saved.error) throw saved.error;
-
         revision = saved.data;
       }
 
@@ -299,30 +243,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // FAYL YUKLASHGA RUXSAT
     if (body.action === "upload") {
       const ext = String(body.name)
         .split(".")
         .pop()
         ?.toLowerCase();
 
-      const video = ["mp4", "webm"].includes(
-        ext || ""
-      );
+      const video = ["mp4", "webm"].includes(ext || "");
 
       must(
         admin || !video,
-        "Video faqat admin tomonidan yuklanadi."
+        "Video faqat admin tomonidan yuklanadi.",
       );
 
       if (
         admin &&
-        (
-          video ||
-          ["pdf", "xls", "xlsx"].includes(
-            ext || ""
-          )
-        )
+        (video || ["pdf", "xls", "xlsx"].includes(ext || ""))
       ) {
         must(canAdmin(user, "lessons"));
       }
@@ -330,33 +266,21 @@ Deno.serve(async (req) => {
       must(
         Number.isSafeInteger(body.size) &&
           body.size > 0 &&
-          (
-            video ||
-            body.size <= 20 * 1024 * 1024
-          ),
-        "Fayl hajmi noto‘g‘ri."
+          (video || body.size <= 20 * 1024 * 1024),
+        "Fayl hajmi noto‘g‘ri.",
       );
 
       must(
         [
-          "mp4",
-          "webm",
-          "pdf",
-          "xls",
-          "xlsx",
-          "jpg",
-          "jpeg",
-          "png",
-          "webp",
-        ].includes(ext || "")
+          "mp4", "webm", "pdf", "xls", "xlsx",
+          "jpg", "jpeg", "png", "webp",
+        ].includes(ext || ""),
+        "Fayl turi ruxsat etilmagan.",
       );
 
       const path =
-        user.id +
-        "/uploads/" +
-        crypto.randomUUID() +
-        "." +
-        ext;
+        user.id + "/uploads/" +
+        crypto.randomUUID() + "." + ext;
 
       const bucket = admin
         ? "academy-media"
@@ -372,115 +296,105 @@ Deno.serve(async (req) => {
         path,
         token: data.token,
         bucket,
-
         endpoint:
           Deno.env.get("SUPABASE_URL")!
             .replace(/\/$/, "")
-            .replace(
-              ".supabase.co",
-              ".storage.supabase.co"
-            ) +
+            .replace(".supabase.co", ".storage.supabase.co") +
           "/storage/v1/upload/resumable/sign",
       });
     }
 
-    // VIDEO VA MATERIALLARNI OCHISH
+    // Video va materiallar havolasi.
     if (body.action === "media") {
+      const path =
+        typeof body.path === "string"
+          ? body.path.trim()
+          : "";
+
       must(
-        typeof body.path === "string" &&
+        path &&
           (
             admin
-              ? adminCanReadFile(
-                  state,
-                  user,
-                  body.path
-                )
-              : mayReadFile(
-                  state,
-                  user,
-                  body.path
-                )
-          )
+              ? adminCanReadFile(state, user, path)
+              : mayReadFile(state, user, path)
+          ),
+        "Faylni ko‘rishga ruxsat yo‘q.",
+      );
+
+      // Dars fayllari xodim hisobidan mustaqil aniqlanadi.
+      const lessonFile = state.lessons.some(
+        (lesson: any) =>
+          lesson.fileId === path ||
+          lesson.materials?.some(
+            (material: any) => material.fileId === path,
+          ),
       );
 
       const owner = state.users.find(
         (account: any) =>
-          account.id ===
-          body.path.split("/")[0]
+          account.id === path.split("/")[0],
       );
 
       const bucket =
-        owner?.role === "admin"
+        lessonFile || owner?.role === "admin"
           ? "academy-media"
           : "academy-student-media";
 
       const { data, error } = await db.storage
         .from(bucket)
-        .createSignedUrl(body.path, 3600);
+        .createSignedUrl(path, 3600);
 
       if (error) throw error;
 
-      return response({
-        url: data.signedUrl,
-      });
+      must(data?.signedUrl, "Fayl havolasi bo‘sh.");
+
+      return response({ url: data.signedUrl });
     }
 
+    if (body.action === "setStaffPassword") {
+      const target = state.users.find(
+        (account: any) =>
+          account.id === body.userId &&
+          account.role === "admin" &&
+          !account.deletedAt,
+      );
 
+      must(target, "Xodim topilmadi.");
 
+      must(
+        admin && canEditStaff(user, target),
+        "Bu xodimning parolini o‘zgartirishga ruxsat yo‘q.",
+      );
 
-    
-if (body.action === "setStaffPassword") {
-  const target = state.users.find(
-    (account: any) =>
-      account.id === body.userId &&
-      account.role === "admin" &&
-      !account.deletedAt
-  );
+      must(
+        typeof body.password === "string" &&
+          body.password.length >= 8 &&
+          body.password.length <= 128,
+        "Yangi parol 8–128 belgi bo‘lsin.",
+      );
 
-  must(target, "Xodim topilmadi.");
+      const changed = await db.auth.admin.updateUserById(
+        target.id,
+        { password: body.password },
+      );
 
-  must(
-    admin && canEditStaff(user, target),
-    "Bu xodimning parolini o‘zgartirishga ruxsat yo‘q."
-  );
+      if (changed.error) throw changed.error;
 
-  must(
-    typeof body.password === "string" &&
-      body.password.length >= 8 &&
-      body.password.length <= 128,
-    "Yangi parol 8–128 belgi bo‘lsin."
-  );
+      must(
+        changed.data.user?.id === target.id,
+        "Auth hisobi mos kelmadi.",
+      );
 
-  const changed =
-    await db.auth.admin.updateUserById(
-      target.id,
-      {
-        password: body.password,
-      }
-    );
+      return response({ ok: true, userId: target.id });
+    }
 
-  if (changed.error) throw changed.error;
-
-  must(
-    changed.data.user?.id === target.id,
-    "Auth hisobi mos kelmadi."
-  );
-
-  return response({
-    ok: true,
-    userId: target.id,
-  });
-}
-
-
-    // TALABA PAROLINI O‘ZGARTIRISH
     if (body.action === "setPassword") {
       must(admin);
 
       const target = state.users.find(
         (account: any) =>
           account.id === body.userId &&
-          account.role === "student"
+          account.role === "student",
       );
 
       must(target, "Talaba topilmadi.");
@@ -489,22 +403,19 @@ if (body.action === "setStaffPassword") {
         typeof body.password === "string" &&
           body.password.length >= 8 &&
           body.password.length <= 128,
-        "Parol 8–128 belgi bo‘lsin."
+        "Parol 8–128 belgi bo‘lsin.",
       );
 
-      const changed =
-        await db.auth.admin.updateUserById(
-          target.id,
-          {
-            password: body.password,
-          }
-        );
+      const changed = await db.auth.admin.updateUserById(
+        target.id,
+        { password: body.password },
+      );
 
       if (changed.error) throw changed.error;
 
       must(
         changed.data.user?.id === target.id,
-        "Auth hisobi mos kelmadi."
+        "Auth hisobi mos kelmadi.",
       );
 
       return response({
@@ -514,138 +425,122 @@ if (body.action === "setStaffPassword") {
       });
     }
 
-    // YOZISH AMALLARI UCHUN REVISION
     must(
       body.revision === row.revision,
-      "Ma’lumot yangilangan. Sahifani yangilab, qayta saqlang."
+      "Ma’lumot yangilangan. Sahifani yangilab, qayta saqlang.",
     );
 
     let result: any;
 
-    // XODIM / ADMINISTRATORNI TAHRIRLASH VA O‘CHIRISH
-    if (
-      body.action === "editStaff" ||
-      body.action === "deleteStaff"
-    ) {
+    if (body.action === "deleteStaff") {
+      const deleted = mutateStaff(
+        state,
+        user,
+        "deleteStaff",
+        body,
+      );
+
+      const staffId = deleted.staffId;
+
+      state.users = state.users.filter(
+        (account: any) => account.id !== staffId,
+      );
+
+      const {
+        data: savedRevision,
+        error: deleteError,
+      } = await db.rpc("academy_delete_staff", {
+        p_expected: row.revision,
+        p_document: state,
+        p_actor: user.id,
+        p_user_id: staffId,
+      });
+
+      if (deleteError) throw deleteError;
+
+      return response({
+        data: clientView(state, user),
+        revision: savedRevision,
+        staffId,
+        ok: true,
+      });
+    } else if (body.action === "editStaff") {
       result = mutateStaff(
         state,
         user,
-        body.action,
-        body
+        "editStaff",
+        body,
       );
-    }
-
-    // TALABANI O‘CHIRISH
-    else if (body.action === "deleteStudent") {
-      result = deleteStudent(
-        state,
-        user,
-        body.userId
-      );
-    }
-
-    // DARSNI O‘CHIRISH
-    else if (body.action === "deleteLesson") {
+    } else if (body.action === "deleteStudent") {
+      result = deleteStudent(state, user, body.userId);
+    } else if (body.action === "deleteLesson") {
       must(
         admin && canAdmin(user, "lessons"),
-        "Darsni o‘chirish uchun kurslar va darslar bo‘limiga ruxsat kerak."
+        "Darsni o‘chirish uchun kurslar va darslar bo‘limiga ruxsat kerak.",
       );
 
-      result = applyLessonDeletion(
-        state,
-        body.lessonId
-      );
-    }
-
-    // VIDEO KO‘RILGANINI SAQLASH
-    else if (body.action === "watchLesson") {
+      result = applyLessonDeletion(state, body.lessonId);
+    } else if (body.action === "watchLesson") {
       must(
-        !admin &&
-          D.unlocked(
-            state,
-            user.id,
-            body.lessonId
-          ),
-        "Dars yopiq."
+        !admin && D.unlocked(state, user.id, body.lessonId),
+        "Dars yopiq.",
       );
 
       state.progress[user.id] ??= {};
-
       state.progress[user.id][body.lessonId] = {
         watched: true,
         watchedAt: new Date().toISOString(),
       };
-    }
-
-    // TEST TOPSHIRISH
-    else if (body.action === "submitTest") {
+    } else if (body.action === "submitTest") {
       must(
-        !admin &&
-          D.unlocked(
-            state,
-            user.id,
-            body.lessonId
-          ),
-        "Dars yopiq."
+        !admin && D.unlocked(state, user.id, body.lessonId),
+        "Dars yopiq.",
       );
 
       const session =
-        state.testSessions[
-          user.id + ":" + body.lessonId
-        ];
+        state.testSessions[user.id + ":" + body.lessonId];
 
       must(
-        session &&
-          session.id === body.sessionId,
-        "Test sessiyasi o‘zgargan. Sahifani yangilang."
+        session && session.id === body.sessionId,
+        "Test sessiyasi o‘zgargan. Sahifani yangilang.",
       );
 
-      D.recordAttempt(
-        state,
-        session,
-        body.answers || {}
-      );
-    }
-
-    // XODIM YOKI ASOSIY ADMINISTRATOR YARATISH
-    else if (body.action === "createAdmin") {
+      D.recordAttempt(state, session, body.answers || {});
+    } else if (body.action === "createAdmin") {
       must(admin);
 
       const adminPages = staffPages(
         user,
         body.adminPages,
-        body.owner ?? false
+        body.owner ?? false,
       );
 
       const username = availableUsername(
         state,
-        body.username
+        body.username,
       );
 
       must(
         typeof body.name === "string" &&
           body.name.trim().length >= 3 &&
           body.name.trim().length <= 120,
-        "Ism 3–120 belgi bo‘lsin."
+        "Ism 3–120 belgi bo‘lsin.",
       );
 
       must(
         typeof body.password === "string" &&
           body.password.length >= 8 &&
           body.password.length <= 128,
-        "Parol 8–128 belgi bo‘lsin."
+        "Parol 8–128 belgi bo‘lsin.",
       );
 
-      const email =
-        crypto.randomUUID() +
-        "@academy.invalid";
+      const email = crypto.randomUUID() + "@academy.invalid";
 
-      const created =
-        await db.auth.admin.createUser({
-          email,
-          password: body.password,
-          email_confirm: true,
-        });
+      const created = await db.auth.admin.createUser({
+        email,
+        password: body.password,
+        email_confirm: true,
+      });
 
       if (created.error) throw created.error;
 
@@ -658,104 +553,62 @@ if (body.action === "setStaffPassword") {
         email,
         role: "admin",
         active: true,
-
-        ...(adminPages === null
-          ? {}
-          : { adminPages }),
-
+        ...(adminPages === null ? {} : { adminPages }),
         createdAt: new Date().toISOString(),
       });
-    }
-
-    // ADMIN IZOHI / SINOV TALABALARINI BELGILASH
-    else if (
+    } else if (
       body.action === "adminNote" ||
       body.action === "markTrialsSeen"
     ) {
-      applyAdminAction(
-        state,
-        user,
-        body.action,
-        body
-      );
-    }
-
-    // ODDIY MA’LUMOT YANGILASH
-    else if (body.action === "update") {
+      applyAdminAction(state, user, body.action, body);
+    } else if (body.action === "update") {
       if (!admin) {
-        for (
-          const submission of
-          body.next.submissions || []
-        ) {
-          const existing =
-            state.submissions.some(
-              (item: any) =>
-                item.id === submission.id
-            );
+        for (const submission of body.next.submissions || []) {
+          const existing = state.submissions.some(
+            (item: any) => item.id === submission.id,
+          );
 
-          if (
-            !existing &&
-            submission.attachment
-          ) {
+          if (!existing && submission.attachment) {
             must(
-              submission.attachment.fileId
-                .startsWith(
-                  user.id + "/uploads/"
-                )
+              submission.attachment.fileId.startsWith(
+                user.id + "/uploads/",
+              ),
             );
           }
         }
 
-        body.next.lessons?.forEach(
-          (lesson: any) => {
-            delete lesson.hasVideo;
-          }
-        );
+        body.next.lessons?.forEach((lesson: any) => {
+          delete lesson.hasVideo;
+        });
       }
 
       applyUpdate(
         state,
         user,
         admin
-          ? adminUpdate(
-              state,
-              user,
-              body.next
-            )
-          : body.next
+          ? adminUpdate(state, user, body.next)
+          : body.next,
       );
-    }
-
-    // TALABA QO‘SHISH / TAHRIRLASH
-    else if (body.action === "student") {
+    } else if (body.action === "student") {
       must(admin);
 
-      const {
-        draft,
-        selected,
-        settings,
-      } = body;
+      const { draft, selected, settings } = body;
 
       const existing = state.users.find(
-        (account: any) =>
-          account.id === draft.id
+        (account: any) => account.id === draft.id,
       );
 
-      must(
-        !existing ||
-          existing.role === "student"
-      );
+      must(!existing || existing.role === "student");
 
       const username = availableUsername(
         state,
         draft.username,
-        existing?.id
+        existing?.id,
       );
 
       const email =
         existing?.email ||
-        crypto.randomUUID() +
-          "@academy.invalid";
+        crypto.randomUUID() + "@academy.invalid";
 
       const clean = {
         id: draft.id,
@@ -765,21 +618,13 @@ if (body.action === "setStaffPassword") {
         phone: draft.phone || "",
         notes: draft.notes || "",
         active: draft.active === true,
-
         accessMode:
-          draft.accessMode === "deposit"
-            ? "deposit"
-            : "active",
-
+          draft.accessMode === "deposit" ? "deposit" : "active",
         role: "student",
-
-        password: existing
-          ? "temporary-validation-only"
-          : draft.password,
-
+        password:
+          existing ? "temporary-validation-only" : draft.password,
         createdAt:
-          existing?.createdAt ||
-          new Date().toISOString(),
+          existing?.createdAt || new Date().toISOString(),
       };
 
       D.saveStudentWithPayment(
@@ -787,16 +632,15 @@ if (body.action === "setStaffPassword") {
         clean,
         selected,
         settings || {},
-        user.id
+        user.id,
       );
 
       if (!existing) {
-        const { data, error } =
-          await db.auth.admin.createUser({
-            email,
-            password: draft.password,
-            email_confirm: true,
-          });
+        const { data, error } = await db.auth.admin.createUser({
+          email,
+          password: draft.password,
+          email_confirm: true,
+        });
 
         if (error) throw error;
 
@@ -809,58 +653,45 @@ if (body.action === "setStaffPassword") {
         clean,
         selected,
         settings || {},
-        user.id
+        user.id,
       );
 
       state.users.forEach((account: any) => {
         delete account.password;
       });
 
-      result = {
-        studentId: clean.id,
-      };
-    }
-
-    // SHAXSIY PROFIL
-    else if (body.action === "profile") {
+      result = { studentId: clean.id };
+    } else if (body.action === "profile") {
       const fields = body.fields;
 
       const username = availableUsername(
         state,
         fields.username,
-        user.id
+        user.id,
       );
 
-      const verified = await authClient()
-        .auth.signInWithPassword({
+      const verified =
+        await authClient().auth.signInWithPassword({
           email: user.email,
-          password: String(
-            fields.currentPassword || ""
-          ),
+          password: String(fields.currentPassword || ""),
         });
 
       must(
         !verified.error &&
           verified.data.user?.id === user.id,
-        "Joriy parol noto‘g‘ri."
+        "Joriy parol noto‘g‘ri.",
       );
 
-      must(
-        fields.name?.trim().length >= 3
-      );
+      must(fields.name?.trim().length >= 3);
 
       must(
         !fields.phone ||
-          /^\+?[0-9 ()-]{7,20}$/.test(
-            fields.phone
-          )
+          /^\+?[0-9 ()-]{7,20}$/.test(fields.phone),
       );
 
       if (fields.avatarId) {
         must(
-          fields.avatarId.startsWith(
-            user.id + "/uploads/"
-          )
+          fields.avatarId.startsWith(user.id + "/uploads/"),
         );
       }
 
@@ -868,41 +699,31 @@ if (body.action === "setStaffPassword") {
         username,
         name: fields.name.trim(),
         phone: fields.phone?.trim() || "",
-
-        ...(fields.avatarId
-          ? { avatarId: fields.avatarId }
-          : {}),
+        ...(fields.avatarId ? { avatarId: fields.avatarId } : {}),
       });
-    }
-
-    // SERTIFIKAT
-    else if (body.action === "certificate") {
+    } else if (body.action === "certificate") {
       result = {
         certificate: D.issueCertificate(
           state,
           user.id,
-          body.courseId
+          body.courseId,
         ),
       };
-    }
-
-    else {
+    } else {
       throw Error("Noma’lum amal.");
     }
 
-    // O‘ZGARISHLARNI SAQLASH
-    const {
-      data: revision,
-      error,
-    } = await db.rpc("academy_commit", {
-      expected: row.revision,
-      document: state,
-      actor: user.id,
-      operation: body.action,
-    });
+    const { data: revision, error } = await db.rpc(
+      "academy_commit",
+      {
+        expected: row.revision,
+        document: state,
+        actor: user.id,
+        operation: body.action,
+      },
+    );
 
     if (error) throw error;
-
     createdId = undefined;
 
     return response({
@@ -912,9 +733,7 @@ if (body.action === "setStaffPassword") {
     });
   } catch (error) {
     if (createdId) {
-      await db.auth.admin.deleteUser(
-        createdId
-      );
+      await db.auth.admin.deleteUser(createdId);
     }
 
     return response(
@@ -926,7 +745,7 @@ if (body.action === "setStaffPassword") {
             ? String(error.message)
             : "Server xatosi",
       },
-      400
+      400,
     );
   }
 });

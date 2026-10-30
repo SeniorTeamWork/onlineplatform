@@ -4,7 +4,6 @@ import { PlayCircle, Lock, Check, Play } from "lucide-react";
 
 import { useApp } from "../context/AppContext";
 import { cloudEnabled, mediaUrl } from "../services/cloud";
-
 import {
   getFile,
   putFile,
@@ -19,29 +18,26 @@ import {
 import "./Lesson.css";
 
 function Player({ lesson, onEnd, watermark }) {
-  const fileId =
-    typeof lesson.fileId === "string" ? lesson.fileId.trim() : "";
-
-  const videoUrl =
-    typeof lesson.video === "string" ? lesson.video.trim() : "";
-
+  const fileId = String(lesson.fileId || "").trim();
+  const videoUrl = String(lesson.video || "").trim();
   const sourceKey = JSON.stringify([lesson.id, fileId, videoUrl]);
 
+  const [attempt, setAttempt] = useState(0);
   const [media, setMedia] = useState({
     key: "",
     src: "",
     error: "",
   });
 
+  const request = useRef(0);
+  const diagnostic = useRef(null);
+  const key = sourceKey + ":" + attempt;
+
   useEffect(() => {
-    let active = true;
+    const ticket = ++request.current;
     let objectUrl;
 
-    setMedia({
-      key: sourceKey,
-      src: "",
-      error: "",
-    });
+    setMedia({ key, src: "", error: "" });
 
     async function load() {
       try {
@@ -54,7 +50,7 @@ function Player({ lesson, onEnd, watermark }) {
             cloudEnabled ? mediaUrl(fileId) : getFile(fileId)
           );
 
-          if (!active) return;
+          if (request.current !== ticket) return;
           if (!file) throw Error("Video fayli topilmadi.");
 
           if (cloudEnabled) {
@@ -65,17 +61,17 @@ function Player({ lesson, onEnd, watermark }) {
           }
         }
 
-        if (active) {
-          setMedia({
-            key: sourceKey,
-            src,
-            error: "",
-          });
+        if (typeof src !== "string" || !src.trim()) {
+          throw Error("Video havolasi bo‘sh.");
+        }
+
+        if (request.current === ticket) {
+          setMedia({ key, src, error: "" });
         }
       } catch (error) {
-        if (active) {
+        if (request.current === ticket) {
           setMedia({
-            key: sourceKey,
+            key,
             src: "",
             error: error.message || "Video ochilmadi.",
           });
@@ -86,22 +82,89 @@ function Player({ lesson, onEnd, watermark }) {
     load();
 
     return () => {
-      active = false;
+      ++request.current;
+      diagnostic.current?.abort();
 
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [sourceKey, fileId, videoUrl]);
+  }, [key, fileId, videoUrl]);
 
   const current =
-    media.key === sourceKey ? media : { src: "", error: "" };
+    media.key === key ? media : { src: "", error: "" };
 
   const hasVideo = Boolean(fileId || videoUrl);
 
+  async function videoError(event) {
+    const element = event.currentTarget;
+    const code = element.error?.code || 0;
+    const src = element.currentSrc || current.src;
+    const ticket = request.current;
+
+    const show = (error) => {
+      if (request.current !== ticket) return;
+
+      setMedia((previous) =>
+        previous.key === key
+          ? { ...previous, error }
+          : previous
+      );
+    };
+
+    show(`Video xatosi: ${code}. Havola tekshirilmoqda…`);
+
+    if (!/^https?:/i.test(src)) {
+      show(
+        `Video xatosi: ${code}. Mahalliy video fayli ijro etilmadi.`
+      );
+      return;
+    }
+
+    diagnostic.current?.abort();
+
+    const controller = new AbortController();
+    diagnostic.current = controller;
+
+    const timer = setTimeout(
+      () => controller.abort(),
+      8000
+    );
+
+    try {
+      const result = await fetch(src, {
+        headers: { Range: "bytes=0-1" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      const type =
+        result.headers.get("content-type") || "noma’lum";
+
+      // Tekshiruv uchun butun videoni yuklab olmaymiz.
+      await result.body?.cancel();
+
+      show(
+        `Video xatosi: ${code}. ` +
+        `HTTP: ${result.status}. Fayl turi: ${type}.`
+      );
+    } catch {
+      show(
+        `Video xatosi: ${code}. Video havolasini tekshirib bo‘lmadi. ` +
+        "Internet yoki serverga ulanishni tekshiring."
+      );
+    } finally {
+      clearTimeout(timer);
+
+      if (diagnostic.current === controller) {
+        diagnostic.current = null;
+      }
+    }
+  }
+
   if (!hasVideo || !current.src || current.error) {
     return (
-      <div className="video-empty">
+      <div className="video-empty" role="status">
         <PlayCircle size={52} />
 
         <h3>
@@ -117,6 +180,16 @@ function Player({ lesson, onEnd, watermark }) {
             ? "Ushbu darsga video joylashtirilgach, shu yerda ko‘rinadi."
             : current.error || "Iltimos, kuting."}
         </p>
+
+        {current.error && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Qayta urinish
+          </button>
+        )}
       </div>
     );
   }
@@ -129,35 +202,17 @@ function Player({ lesson, onEnd, watermark }) {
       <div className="video-watermark">{watermark}</div>
 
       <video
-        key={sourceKey}
+        key={key}
         className="video"
         src={current.src}
         controls
+        playsInline
+        preload="metadata"
         controlsList="nodownload noremoteplayback"
         disablePictureInPicture
         disableRemotePlayback
-        playsInline
-        preload="metadata"
         onEnded={onEnd}
-       onError={(event) => {
-  const video = event.currentTarget;
-  const code = video.error?.code || 0;
-
-  const messages = {
-    1: "Videoni yuklash bekor qilindi.",
-    2: "Videoni yuklashda tarmoq xatosi yuz berdi.",
-    3: "Brauzer videoni dekodlay olmadi. Fayl yoki kodekni tekshirish kerak.",
-    4: "Video manbasi yoki formati brauzer tomonidan qabul qilinmadi.",
-  };
-
-  setMedia({
-    key: sourceKey,
-    src: "",
-    error:
-      `Xato kodi: ${code}. ` +
-      (messages[code] || "Noma’lum video xatosi."),
-  });
-}}
+        onError={videoError}
       />
     </div>
   );
@@ -165,7 +220,6 @@ function Player({ lesson, onEnd, watermark }) {
 
 export default function Lesson() {
   const { id } = useParams();
-
   return <LessonContent key={id} id={id} />;
 }
 
@@ -194,7 +248,7 @@ function LessonContent({ id }) {
     return (
       <div className="empty">
         Dars yopiq yoki mavjud emas.{" "}
-        <Link to="/student/course">Kurslarim</Link>
+        <Link to="/student">Kurslarim</Link>
       </div>
     );
   }
@@ -203,17 +257,13 @@ function LessonContent({ id }) {
   const session = data.testSessions[key];
 
   const attempts = data.attempts.filter(
-    (attempt) =>
-      attempt.userId === user.id &&
-      attempt.lessonId === id
+    (item) => item.userId === user.id && item.lessonId === id
   );
 
   const latest = attempts[attempts.length - 1];
 
   const practices = data.submissions.filter(
-    (submission) =>
-      submission.userId === user.id &&
-      submission.lessonId === id
+    (item) => item.userId === user.id && item.lessonId === id
   );
 
   const courseLessons = data.lessons.filter(
@@ -222,12 +272,6 @@ function LessonContent({ id }) {
       item.published &&
       !item.archived
   );
-
-  const currentIndex = courseLessons.findIndex(
-    (item) => item.id === id
-  );
-
-  const nextLesson = courseLessons[currentIndex + 1];
 
   async function start() {
     if (busy) return;
@@ -239,7 +283,7 @@ function LessonContent({ id }) {
       await update((draft) => {
         if (draft.testSessions[key]) return;
 
-        if (!lesson.questions.length) {
+        if (!lesson.questions?.length) {
           throw Error("Test mavjud emas.");
         }
 
@@ -306,13 +350,10 @@ function LessonContent({ id }) {
 
     try {
       if (cloud) {
-        await command("watchLesson", {
-          lessonId: id,
-        });
+        await command("watchLesson", { lessonId: id });
       } else {
         await update((draft) => {
           draft.progress[user.id] ??= {};
-
           draft.progress[user.id][id] = {
             watched: true,
             watchedAt: new Date().toISOString(),
@@ -328,7 +369,6 @@ function LessonContent({ id }) {
 
   async function practice(event) {
     event.preventDefault();
-
     if (busy) return;
 
     setBusy(true);
@@ -418,16 +458,6 @@ function LessonContent({ id }) {
                 : "Video oxirigacha ko‘rilgach holat saqlanadi."}
             </p>
           )}
-
-          {/* {nextLesson &&
-            unlocked(data, user.id, nextLesson.id) && (
-              <Link
-                className="primary"
-                to={"/student/lesson/" + nextLesson.id}
-              >
-                Keyingi dars →
-              </Link>
-            )} */}
         </div>
 
         <aside className="panel lesson-playlist">
@@ -448,13 +478,11 @@ function LessonContent({ id }) {
                     {item.title}
                   </span>
 
-                  {done ? (
-                    <Check size={18} />
-                  ) : open ? (
-                    <Play size={18} />
-                  ) : (
-                    <Lock size={18} />
-                  )}
+                  {done
+                    ? <Check size={18} />
+                    : open
+                      ? <Play size={18} />
+                      : <Lock size={18} />}
                 </>
               );
 
@@ -502,8 +530,8 @@ function LessonContent({ id }) {
           ["materials", "3. Qo‘shimcha materiallar"],
         ].map(([value, label]) => (
           <button
-            type="button"
             key={value}
+            type="button"
             role="tab"
             aria-selected={tab === value}
             aria-controls={"panel-" + value}
@@ -523,14 +551,12 @@ function LessonContent({ id }) {
         {tab === "test" ? (
           <>
             <h2>Bilimingizni tekshiring</h2>
-
-           <br />
+            <br />
 
             {session ? (
               <form onSubmit={finish}>
                 {session.questions.map((question, index) => (
                   <fieldset key={question.id}>
-                    
                     <legend>
                       {index + 1}. {question.text}
                     </legend>
@@ -548,7 +574,7 @@ function LessonContent({ id }) {
                           checked={
                             (
                               testAnswers[question.id] ??
-                              session.answers[question.id]
+                              session.answers?.[question.id]
                             ) === optionIndex
                           }
                           onChange={() => {
@@ -581,9 +607,7 @@ function LessonContent({ id }) {
                   className="primary"
                   disabled={busy}
                 >
-                  {busy
-                    ? "Saqlanmoqda…"
-                    : "Testni topshirish"}
+                  {busy ? "Saqlanmoqda…" : "Testni topshirish"}
                 </button>
               </form>
             ) : (
@@ -592,15 +616,14 @@ function LessonContent({ id }) {
                   <p className="result">
                     Oxirgi natija:{" "}
                     {Number(latest.score).toFixed(2)}%
-                    {" · "}
-                    Test yakunlandi
+                    {" · "}Test yakunlandi
                   </p>
                 )}
 
                 <button
                   type="button"
                   className="primary"
-                  disabled={busy || !lesson.questions.length}
+                  disabled={busy || !lesson.questions?.length}
                   onClick={start}
                 >
                   {latest
@@ -644,7 +667,7 @@ function LessonContent({ id }) {
             <p>{lesson.task}</p>
 
             {practices.some(
-              (submission) => submission.status === "pending"
+              (item) => item.status === "pending"
             ) ? (
               <p className="badge">
                 Yuborilgan ish tekshirilmoqda.
@@ -672,7 +695,7 @@ function LessonContent({ id }) {
                     accept=".pdf,.xls,.xlsx,.png,.jpg,.jpeg"
                     onChange={(event) =>
                       setAttachment(
-                        event.target.files[0] || null
+                        event.target.files?.[0] || null
                       )
                     }
                   />
@@ -718,13 +741,11 @@ function LessonContent({ id }) {
                 </p>
 
                 <strong>
-                  {
-                    {
-                      pending: "Tekshirilmoqda",
-                      approved: "Tasdiqlangan",
-                      rejected: "Qaytarilgan",
-                    }[submission.status]
-                  }
+                  {{
+                    pending: "Tekshirilmoqda",
+                    approved: "Tasdiqlangan",
+                    rejected: "Qaytarilgan",
+                  }[submission.status]}
                 </strong>
 
                 <p>Baho: {submission.grade ?? "—"} / 100</p>
