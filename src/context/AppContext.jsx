@@ -1,28 +1,24 @@
 import {
   createContext,
   useContext,
+  useEffect,
+  useMemo,
   useRef,
   useState,
-  useEffect,
 } from "react";
 
-import {
-  read,
-  write,
-  migrate,
-} from "../services/db";
-
-import {
-  cloudEnabled,
-  api,
-} from "../services/cloud";
-
+import { read, write, migrate } from "../services/db";
+import { cloudEnabled, api } from "../services/cloud";
 import {
   supabase,
   supabaseConfigError,
 } from "../services/supabase";
+import { newestFirst } from "../services/listOrder";
 
 const Context = createContext(null);
+
+const DATA_KEY = "ai-academy-v1";
+const USER_KEY = "academy-user";
 
 const empty = () =>
   migrate({
@@ -46,23 +42,29 @@ export function AppProvider({ children }) {
   );
 
   const current = useRef(data);
+  const revision = useRef(0);
+  const queue = useRef(Promise.resolve());
+  const lastSaved = useRef(localStorage.getItem(DATA_KEY));
 
   const [session, setSession] = useState(() =>
     cloudEnabled
       ? null
-      : localStorage.getItem("academy-user") ||
-        sessionStorage.getItem("academy-user")
+      : localStorage.getItem(USER_KEY) ||
+        sessionStorage.getItem(USER_KEY)
   );
 
   const [loading, setLoading] = useState(cloudEnabled);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const revision = useRef(0);
-  const queue = useRef(Promise.resolve());
-
-  const lastSaved = useRef(
-    localStorage.getItem("ai-academy-v1")
+  // Barcha sahifalarga yangi hisoblar birinchi bo‘lib beriladi.
+  // Saqlash uchun current ichidagi asl tartib ishlatiladi.
+  const displayData = useMemo(
+    () => ({
+      ...data,
+      users: newestFirst(data.users),
+    }),
+    [data]
   );
 
   const user = data.users.find(
@@ -73,9 +75,7 @@ export function AppProvider({ children }) {
   function accept(result) {
     current.current = result.data;
     revision.current = result.revision;
-
     setData(result.data);
-
     return result;
   }
 
@@ -85,35 +85,28 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (!cloudEnabled) {
-      const changed = (event) => {
-        if (event.key !== "ai-academy-v1") return;
+      function changed(event) {
+        if (event.key !== DATA_KEY) return;
 
         try {
           const next = read();
-
           current.current = next;
-
           setData(next);
-
-          lastSaved.current = localStorage.getItem(
-            "ai-academy-v1"
-          );
+          lastSaved.current = localStorage.getItem(DATA_KEY);
         } catch (error) {
           setNotice(error.message);
         }
-      };
+      }
 
       window.addEventListener("storage", changed);
 
-      return () => {
+      return () =>
         window.removeEventListener("storage", changed);
-      };
     }
 
     if (!supabase) {
       setLoading(false);
       setNotice(supabaseConfigError);
-
       return;
     }
 
@@ -127,13 +120,10 @@ export function AppProvider({ children }) {
 
         if (authSession) {
           const result = await api("read");
-
           if (alive) accept(result);
         } else {
           const next = empty();
-
           current.current = next;
-
           setData(next);
         }
       } catch (error) {
@@ -148,9 +138,10 @@ export function AppProvider({ children }) {
 
     supabase.auth
       .getSession()
-      .then(({ data: authData }) =>
-        restore(authData.session)
-      )
+      .then(({ data: authData, error }) => {
+        if (error) throw error;
+        return restore(authData.session);
+      })
       .catch((error) => {
         if (alive) {
           setNotice(error.message);
@@ -170,7 +161,6 @@ export function AppProvider({ children }) {
 
     return () => {
       alive = false;
-
       subscription.unsubscribe();
     };
   }, []);
@@ -179,7 +169,7 @@ export function AppProvider({ children }) {
     if (!cloudEnabled) {
       try {
         if (
-          localStorage.getItem("ai-academy-v1") !==
+          localStorage.getItem(DATA_KEY) !==
           lastSaved.current
         ) {
           throw Error(
@@ -192,18 +182,13 @@ export function AppProvider({ children }) {
         callback(next);
         write(next);
 
-        lastSaved.current = localStorage.getItem(
-          "ai-academy-v1"
-        );
-
+        lastSaved.current = localStorage.getItem(DATA_KEY);
         current.current = next;
-
         setData(next);
 
         return true;
       } catch (error) {
         setNotice(error.message);
-
         return false;
       }
     }
@@ -213,7 +198,6 @@ export function AppProvider({ children }) {
 
       try {
         const next = structuredClone(current.current);
-
         callback(next);
 
         accept(
@@ -230,7 +214,7 @@ export function AppProvider({ children }) {
         try {
           await refresh();
         } catch {
-          // Asl xato xabari ekranda qoladi.
+          // Asl xato saqlanadi.
         }
 
         return false;
@@ -240,7 +224,6 @@ export function AppProvider({ children }) {
     });
 
     queue.current = job.catch(() => {});
-
     return job;
   }
 
@@ -254,9 +237,7 @@ export function AppProvider({ children }) {
           revision: revision.current,
         });
 
-        if (result.data) {
-          accept(result);
-        }
+        if (result.data) accept(result);
 
         return result;
       } catch (error) {
@@ -265,7 +246,7 @@ export function AppProvider({ children }) {
         try {
           await refresh();
         } catch {
-          // Asl xato xabari saqlanadi.
+          // Asl xato saqlanadi.
         }
 
         throw error;
@@ -275,7 +256,6 @@ export function AppProvider({ children }) {
     });
 
     queue.current = job.catch(() => {});
-
     return job;
   }
 
@@ -325,7 +305,6 @@ export function AppProvider({ children }) {
         return account;
       } catch (error) {
         await supabase.auth.signOut();
-
         throw error;
       }
     }
@@ -334,9 +313,12 @@ export function AppProvider({ children }) {
 
     const account = current.current.users.find(
       (item) =>
-        (String(item.username || "").toLowerCase() ===
-          normalized ||
-          item.email.toLowerCase() === normalized) &&
+        (
+          String(item.username || "").toLowerCase() ===
+            normalized ||
+          String(item.email || "").toLowerCase() ===
+            normalized
+        ) &&
         item.password === password &&
         item.active
     );
@@ -348,10 +330,7 @@ export function AppProvider({ children }) {
     }
 
     write(current.current);
-
-    lastSaved.current = localStorage.getItem(
-      "ai-academy-v1"
-    );
+    lastSaved.current = localStorage.getItem(DATA_KEY);
 
     const target = remember
       ? localStorage
@@ -361,8 +340,8 @@ export function AppProvider({ children }) {
       ? sessionStorage
       : localStorage;
 
-    target.setItem("academy-user", account.id);
-    other.removeItem("academy-user");
+    target.setItem(USER_KEY, account.id);
+    other.removeItem(USER_KEY);
 
     setSession(account.id);
     setNotice("");
@@ -372,17 +351,21 @@ export function AppProvider({ children }) {
 
   async function logout() {
     if (cloudEnabled) {
+      if (!supabase) {
+        setNotice(supabaseConfigError);
+        return false;
+      }
+
       const { error } = await supabase.auth.signOut();
 
       if (error) {
         setNotice(error.message);
-
         return false;
       }
     }
 
-    localStorage.removeItem("academy-user");
-    sessionStorage.removeItem("academy-user");
+    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(USER_KEY);
 
     setSession(null);
     setNotice("");
@@ -401,7 +384,7 @@ export function AppProvider({ children }) {
   return (
     <Context.Provider
       value={{
-        data,
+        data: displayData,
         user,
         update,
         login,
@@ -420,7 +403,7 @@ export function AppProvider({ children }) {
           Saqlanmoqda…
         </div>
       )}
-StudentPasswordForm.jsx
+
       {notice && (
         <div className="toast" role="status">
           {notice}

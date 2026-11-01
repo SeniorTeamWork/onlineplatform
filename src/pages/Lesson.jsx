@@ -189,7 +189,18 @@ function Player({ lesson, onEnd, watermark }) {
           >
             Qayta urinish
           </button>
+          
         )}
+        {current.error && current.src && (
+  <a
+    href={current.src}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="secondary"
+  >
+    Videoni alohida ochish
+  </a>
+)}
       </div>
     );
   }

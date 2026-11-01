@@ -1,9 +1,9 @@
 import { Upload } from "tus-js-client";
-
 import {
   supabase,
   supabaseConfigError,
 } from "./supabase";
+import { newestFirst } from "./listOrder";
 
 export const cloudEnabled =
   process.env.REACT_APP_DATA_MODE !== "demo";
@@ -16,8 +16,8 @@ export async function api(action, payload = {}) {
   const { data, error } =
     await supabase.functions.invoke("academy", {
       body: {
-        action,
         ...payload,
+        action,
       },
     });
 
@@ -26,7 +26,6 @@ export async function api(action, payload = {}) {
 
     try {
       const result = await error.context.json();
-
       message = result.error || message;
     } catch {
       // Asl xabar saqlanadi.
@@ -39,7 +38,48 @@ export async function api(action, payload = {}) {
     throw Error(data.error);
   }
 
+  // Xodimlar alohida API orqali olinadi.
+  if (
+    action === "staffOverview" &&
+    Array.isArray(data?.staff)
+  ) {
+    return {
+      ...data,
+      staff: newestFirst(data.staff),
+    };
+  }
+
   return data;
+}
+
+function compactJwt(value) {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
+      value
+    )
+  );
+}
+
+async function accessToken() {
+  if (!supabase) {
+    throw Error(supabaseConfigError);
+  }
+
+  const { data, error } =
+    await supabase.auth.getSession();
+
+  if (error) throw error;
+
+  const token = data.session?.access_token;
+
+  if (!compactJwt(token)) {
+    throw Error(
+      "Sessiya topilmadi. Hisobdan chiqib, qayta kiring."
+    );
+  }
+
+  return token;
 }
 
 export async function uploadCloudFile(
@@ -56,10 +96,8 @@ export async function uploadCloudFile(
     webm: "video/webm",
     pdf: "application/pdf",
     xls: "application/vnd.ms-excel",
-
     xlsx:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-
     png: "image/png",
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
@@ -73,8 +111,6 @@ export async function uploadCloudFile(
 
   const video = mime.startsWith("video/");
 
-  // Videoga frontend hajm chegarasi qo‘yilmaydi.
-  // Boshqa fayllar uchun oldingi chegara saqlanadi.
   if (!video && file.size > 20 * 1024 * 1024) {
     throw Error("Fayl 20 MB dan oshmasin.");
   }
@@ -90,15 +126,6 @@ export async function uploadCloudFile(
     size: file.size,
   });
 
-  function compactJwt(value) {
-    return (
-      typeof value === "string" &&
-      /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
-        value
-      )
-    );
-  }
-
   if (
     !compactJwt(token) ||
     !path ||
@@ -109,26 +136,6 @@ export async function uploadCloudFile(
     throw Error(
       "Yuklash ruxsati noto‘g‘ri. academy Edge Function kodini yangilab deploy qiling."
     );
-  }
-
-  async function accessToken() {
-    const { data, error } =
-      await supabase.auth.getSession();
-
-    if (error) {
-      throw error;
-    }
-
-    const currentToken =
-      data.session?.access_token;
-
-    if (!compactJwt(currentToken)) {
-      throw Error(
-        "Sessiya topilmadi. Hisobdan chiqib, qayta kiring."
-      );
-    }
-
-    return currentToken;
   }
 
   const access = await accessToken();
@@ -148,26 +155,15 @@ export async function uploadCloudFile(
       },
 
       async onBeforeRequest(request) {
-        const currentToken = await accessToken();
-
         request.setHeader(
           "Authorization",
-          "Bearer " + currentToken
+          "Bearer " + await accessToken()
         );
       },
 
-      retryDelays: [
-        0,
-        1000,
-        3000,
-        5000,
-        10000,
-      ],
-
+      retryDelays: [0, 1000, 3000, 5000, 10000],
       chunkSize: 6 * 1024 * 1024,
-
       uploadDataDuringCreation: true,
-
       removeFingerprintOnSuccess: true,
 
       metadata: {
@@ -178,16 +174,18 @@ export async function uploadCloudFile(
       },
 
       onProgress(sent, total) {
-        onProgress?.(
-          Math.round((sent / total) * 100)
-        );
+        if (total > 0) {
+          onProgress?.(
+            Math.round((sent / total) * 100)
+          );
+        }
       },
 
       onError(error) {
         reject(
           Error(
             "Yuklash amalga oshmadi: " +
-              error.message
+            error.message
           )
         );
       },
@@ -204,17 +202,20 @@ export async function uploadCloudFile(
 }
 
 export async function mediaUrl(path) {
-  const result = await api("media", {
-    path,
-  });
+  const result = await api("media", { path });
+
+  if (
+    typeof result?.url !== "string" ||
+    !result.url
+  ) {
+    throw Error("Fayl havolasi olinmadi.");
+  }
 
   return result.url;
 }
 
 export async function cloudFile(path) {
-  const result = await fetch(
-    await mediaUrl(path)
-  );
+  const result = await fetch(await mediaUrl(path));
 
   if (!result.ok) {
     throw Error("Fayl yuklanmadi.");

@@ -179,31 +179,35 @@ export default function Statistics() {
         </div>
       </div>
 
-      <details>
-        {/* <summary>Kunlik summalarni ko‘rish</summary> */}
+     {stats.count > 0 && (
+  <details>
+    <summary>To‘lovlar tarixi</summary>
 
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Sana</th>
-                <th>To‘lovlar</th>
-                <th>Summa</th>
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Sana</th>
+            <th>To‘lovlar</th>
+            <th>Summa</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {stats.buckets
+            .filter((bucket) => bucket.count > 0)
+            .map((bucket) => (
+              <tr key={bucket.date}>
+                <td>{bucket.date}</td>
+                <td>{bucket.count}</td>
+                <td>{money(bucket.amount)}</td>
               </tr>
-            </thead>
-
-            <tbody>
-              {stats.buckets.map((bucket) => (
-                <tr key={bucket.date}>
-                  <td>{bucket.date}</td>
-                  <td>{bucket.count}</td>
-                  <td>{money(bucket.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+            ))}
+        </tbody>
+      </table>
+    </div>
+  </details>
+)}
     </section>
   );
 }
