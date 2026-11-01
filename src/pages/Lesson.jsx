@@ -132,9 +132,9 @@ function Player({ lesson, onEnd, watermark }) {
     // );
 
     const timer = setTimeout(
-  () => controller.abort(),
-  300000
-);
+      () => controller.abort(),
+      300000
+    );
 
     try {
       const result = await fetch(src, {
@@ -186,7 +186,7 @@ function Player({ lesson, onEnd, watermark }) {
             : current.error || "Iltimos, kuting."}
         </p>
 
-        {current.error && (
+        {/* {current.error && (
           <button
             type="button"
             className="secondary"
@@ -195,22 +195,23 @@ function Player({ lesson, onEnd, watermark }) {
             Qayta urinish
           </button>
 
+        )} */}
+
+        {current.error && current.src && (
+          <a
+            href={current.src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="secondary"
+          >
+            Videoni alohida ochish
+          </a>
         )}
+
       </div>
     );
   }
-  {
-    current.error && current.src && (
-      <a
-        href={current.src}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="secondary"
-      >
-        Videoni alohida ochish
-      </a>
-    )
-  }
+
 
   return (
     <div
