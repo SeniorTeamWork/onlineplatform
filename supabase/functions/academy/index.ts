@@ -1,18 +1,29 @@
+import {
+  firstTrialLesson,
+  unreadTrialLessons,
+  markTrialNoticeSeen,
+} from "../_shared/trialNotifications.js";
+
 import { createClient } from "npm:@supabase/supabase-js@2";
+
 import { deleteStudent } from "../_shared/deleteStudent.js";
 import { applyLessonDeletion } from "../_shared/deleteLesson.js";
+
 import {
   staffAction,
   mutateStaff,
   staffPages,
 } from "../_shared/staff.js";
+
 import { availableUsername } from "../_shared/identity.js";
+
 import {
   view,
   applyUpdate,
   mayReadFile,
   applyAdminAction,
 } from "../_shared/logic.js";
+
 import {
   adminView,
   adminUpdate,
@@ -21,6 +32,7 @@ import {
   canAdmin,
   canEditStaff,
 } from "../_shared/adminAccess.js";
+
 import * as D from "../_shared/domain.js";
 
 const db = createClient(
@@ -43,7 +55,10 @@ const headers = {
 };
 
 const response = (value: unknown, status = 200) =>
-  new Response(JSON.stringify(value), { status, headers });
+  new Response(JSON.stringify(value), {
+    status,
+    headers,
+  });
 
 function must(
   value: unknown,
@@ -124,7 +139,9 @@ Deno.serve(async (req) => {
         .single();
 
       if (loaded.error) {
-        throw Error("Kirish xizmati vaqtincha mavjud emas.");
+        throw Error(
+          "Kirish xizmati vaqtincha mavjud emas.",
+        );
       }
 
       const account = loaded.data.data.users.find(
@@ -156,8 +173,10 @@ Deno.serve(async (req) => {
 
       return response({
         session: {
-          access_token: signed.data.session!.access_token,
-          refresh_token: signed.data.session!.refresh_token,
+          access_token:
+            signed.data.session!.access_token,
+          refresh_token:
+            signed.data.session!.refresh_token,
         },
       });
     }
@@ -193,7 +212,8 @@ Deno.serve(async (req) => {
     state.expenses ??= [];
 
     const user = state.users.find(
-      (account: any) => account.id === auth.user!.id,
+      (account: any) =>
+        account.id === auth.user!.id,
     );
 
     must(
@@ -212,11 +232,105 @@ Deno.serve(async (req) => {
       body.action === "staffOverview"
     ) {
       return response(
-        await staffAction(db, state, user, body.action),
+        await staffAction(
+          db,
+          state,
+          user,
+          body.action,
+        ),
       );
     }
 
-    const emailChanged = user.email !== auth.user!.email;
+    if (body.action === "trialNoticeStatus") {
+      must(
+        admin &&
+          [
+            "dashboard",
+            "students",
+            "trials",
+            "finance",
+          ].some((page) => canAdmin(user, page)),
+        "Talabalar bildirishnomalariga ruxsat yo‘q.",
+      );
+
+      return response({
+        studentIds: state.users
+          .filter(
+            (student: any) =>
+              unreadTrialLessons(
+                state,
+                student.id,
+              ).length > 0,
+          )
+          .map((student: any) => student.id),
+      });
+    }
+
+    if (body.action === "seeTrialNotice") {
+      must(
+        admin && canAdmin(user, "students"),
+        "Talaba sahifasini ko‘rishga ruxsat yo‘q.",
+      );
+
+      const target = state.users.find(
+        (student: any) =>
+          student.id === body.userId &&
+          student.role === "student" &&
+          !student.deletedAt,
+      );
+
+      must(target, "Talaba topilmadi.");
+
+      if (
+        !unreadTrialLessons(state, target.id).length
+      ) {
+        return response({
+          data: clientView(state, user),
+          revision: row.revision,
+        });
+      }
+    }
+
+    if (body.action === "startTrialLesson") {
+      must(
+        user.role === "student" &&
+          D.unlocked(
+            state,
+            user.id,
+            body.lessonId,
+          ),
+        "Dars yopiq.",
+      );
+
+      const lesson = state.lessons.find(
+        (item: any) => item.id === body.lessonId,
+      );
+
+      must(
+        lesson &&
+          firstTrialLesson(
+            state,
+            lesson.courseId,
+          )?.id === lesson.id,
+        "Bu kursning birinchi darsi emas.",
+      );
+
+      const progress =
+        state.progress?.[user.id]?.[lesson.id];
+
+      if (
+        progress?.trialStartedAt ||
+        progress?.watched
+      ) {
+        return response({
+          data: clientView(state, user),
+          revision: row.revision,
+        });
+      }
+    }
+
+    const emailChanged =
+      user.email !== auth.user!.email;
 
     if (emailChanged) {
       user.email = auth.user!.email;
@@ -226,14 +340,18 @@ Deno.serve(async (req) => {
       let revision = row.revision;
 
       if (emailChanged) {
-        const saved = await db.rpc("academy_commit", {
-          expected: row.revision,
-          document: state,
-          actor: user.id,
-          operation: "sync-email",
-        });
+        const saved = await db.rpc(
+          "academy_commit",
+          {
+            expected: row.revision,
+            document: state,
+            actor: user.id,
+            operation: "sync-email",
+          },
+        );
 
         if (saved.error) throw saved.error;
+
         revision = saved.data;
       }
 
@@ -249,7 +367,10 @@ Deno.serve(async (req) => {
         .pop()
         ?.toLowerCase();
 
-      const video = ["mp4", "webm"].includes(ext || "");
+      const video = [
+        "mp4",
+        "webm",
+      ].includes(ext || "");
 
       must(
         admin || !video,
@@ -258,7 +379,10 @@ Deno.serve(async (req) => {
 
       if (
         admin &&
-        (video || ["pdf", "xls", "xlsx"].includes(ext || ""))
+        (
+          video ||
+          ["pdf", "xls", "xlsx"].includes(ext || "")
+        )
       ) {
         must(canAdmin(user, "lessons"));
       }
@@ -266,21 +390,34 @@ Deno.serve(async (req) => {
       must(
         Number.isSafeInteger(body.size) &&
           body.size > 0 &&
-          (video || body.size <= 20 * 1024 * 1024),
+          (
+            video ||
+            body.size <= 20 * 1024 * 1024
+          ),
         "Fayl hajmi noto‘g‘ri.",
       );
 
       must(
         [
-          "mp4", "webm", "pdf", "xls", "xlsx",
-          "jpg", "jpeg", "png", "webp",
+          "mp4",
+          "webm",
+          "pdf",
+          "xls",
+          "xlsx",
+          "jpg",
+          "jpeg",
+          "png",
+          "webp",
         ].includes(ext || ""),
         "Fayl turi ruxsat etilmagan.",
       );
 
       const path =
-        user.id + "/uploads/" +
-        crypto.randomUUID() + "." + ext;
+        user.id +
+        "/uploads/" +
+        crypto.randomUUID() +
+        "." +
+        ext;
 
       const bucket = admin
         ? "academy-media"
@@ -299,12 +436,14 @@ Deno.serve(async (req) => {
         endpoint:
           Deno.env.get("SUPABASE_URL")!
             .replace(/\/$/, "")
-            .replace(".supabase.co", ".storage.supabase.co") +
+            .replace(
+              ".supabase.co",
+              ".storage.supabase.co",
+            ) +
           "/storage/v1/upload/resumable/sign",
       });
     }
 
-    // Video va materiallar havolasi.
     if (body.action === "media") {
       const path =
         typeof body.path === "string"
@@ -321,12 +460,12 @@ Deno.serve(async (req) => {
         "Faylni ko‘rishga ruxsat yo‘q.",
       );
 
-      // Dars fayllari xodim hisobidan mustaqil aniqlanadi.
       const lessonFile = state.lessons.some(
         (lesson: any) =>
           lesson.fileId === path ||
           lesson.materials?.some(
-            (material: any) => material.fileId === path,
+            (material: any) =>
+              material.fileId === path,
           ),
       );
 
@@ -346,9 +485,14 @@ Deno.serve(async (req) => {
 
       if (error) throw error;
 
-      must(data?.signedUrl, "Fayl havolasi bo‘sh.");
+      must(
+        data?.signedUrl,
+        "Fayl havolasi bo‘sh.",
+      );
 
-      return response({ url: data.signedUrl });
+      return response({
+        url: data.signedUrl,
+      });
     }
 
     if (body.action === "setStaffPassword") {
@@ -373,10 +517,11 @@ Deno.serve(async (req) => {
         "Yangi parol 8–128 belgi bo‘lsin.",
       );
 
-      const changed = await db.auth.admin.updateUserById(
-        target.id,
-        { password: body.password },
-      );
+      const changed =
+        await db.auth.admin.updateUserById(
+          target.id,
+          { password: body.password },
+        );
 
       if (changed.error) throw changed.error;
 
@@ -385,7 +530,10 @@ Deno.serve(async (req) => {
         "Auth hisobi mos kelmadi.",
       );
 
-      return response({ ok: true, userId: target.id });
+      return response({
+        ok: true,
+        userId: target.id,
+      });
     }
 
     if (body.action === "setPassword") {
@@ -406,10 +554,11 @@ Deno.serve(async (req) => {
         "Parol 8–128 belgi bo‘lsin.",
       );
 
-      const changed = await db.auth.admin.updateUserById(
-        target.id,
-        { password: body.password },
-      );
+      const changed =
+        await db.auth.admin.updateUserById(
+          target.id,
+          { password: body.password },
+        );
 
       if (changed.error) throw changed.error;
 
@@ -432,7 +581,17 @@ Deno.serve(async (req) => {
 
     let result: any;
 
-    if (body.action === "deleteStaff") {
+    if (body.action === "startTrialLesson") {
+      state.progress ??= {};
+      state.progress[user.id] ??= {};
+      state.progress[user.id][body.lessonId] ??= {};
+
+      state.progress[user.id][
+        body.lessonId
+      ].trialStartedAt = new Date().toISOString();
+    } else if (body.action === "seeTrialNotice") {
+      markTrialNoticeSeen(state, body.userId);
+    } else if (body.action === "deleteStaff") {
       const deleted = mutateStaff(
         state,
         user,
@@ -472,40 +631,64 @@ Deno.serve(async (req) => {
         body,
       );
     } else if (body.action === "deleteStudent") {
-      result = deleteStudent(state, user, body.userId);
+      result = deleteStudent(
+        state,
+        user,
+        body.userId,
+      );
     } else if (body.action === "deleteLesson") {
       must(
         admin && canAdmin(user, "lessons"),
         "Darsni o‘chirish uchun kurslar va darslar bo‘limiga ruxsat kerak.",
       );
 
-      result = applyLessonDeletion(state, body.lessonId);
+      result = applyLessonDeletion(
+        state,
+        body.lessonId,
+      );
     } else if (body.action === "watchLesson") {
       must(
-        !admin && D.unlocked(state, user.id, body.lessonId),
+        !admin &&
+          D.unlocked(
+            state,
+            user.id,
+            body.lessonId,
+          ),
         "Dars yopiq.",
       );
 
       state.progress[user.id] ??= {};
+
       state.progress[user.id][body.lessonId] = {
         watched: true,
         watchedAt: new Date().toISOString(),
       };
     } else if (body.action === "submitTest") {
       must(
-        !admin && D.unlocked(state, user.id, body.lessonId),
+        !admin &&
+          D.unlocked(
+            state,
+            user.id,
+            body.lessonId,
+          ),
         "Dars yopiq.",
       );
 
       const session =
-        state.testSessions[user.id + ":" + body.lessonId];
+        state.testSessions[
+          user.id + ":" + body.lessonId
+        ];
 
       must(
         session && session.id === body.sessionId,
         "Test sessiyasi o‘zgargan. Sahifani yangilang.",
       );
 
-      D.recordAttempt(state, session, body.answers || {});
+      D.recordAttempt(
+        state,
+        session,
+        body.answers || {},
+      );
     } else if (body.action === "createAdmin") {
       must(admin);
 
@@ -534,13 +717,15 @@ Deno.serve(async (req) => {
         "Parol 8–128 belgi bo‘lsin.",
       );
 
-      const email = crypto.randomUUID() + "@academy.invalid";
+      const email =
+        crypto.randomUUID() + "@academy.invalid";
 
-      const created = await db.auth.admin.createUser({
-        email,
-        password: body.password,
-        email_confirm: true,
-      });
+      const created =
+        await db.auth.admin.createUser({
+          email,
+          password: body.password,
+          email_confirm: true,
+        });
 
       if (created.error) throw created.error;
 
@@ -553,20 +738,32 @@ Deno.serve(async (req) => {
         email,
         role: "admin",
         active: true,
-        ...(adminPages === null ? {} : { adminPages }),
+        ...(adminPages === null
+          ? {}
+          : { adminPages }),
         createdAt: new Date().toISOString(),
       });
     } else if (
       body.action === "adminNote" ||
       body.action === "markTrialsSeen"
     ) {
-      applyAdminAction(state, user, body.action, body);
+      applyAdminAction(
+        state,
+        user,
+        body.action,
+        body,
+      );
     } else if (body.action === "update") {
       if (!admin) {
-        for (const submission of body.next.submissions || []) {
-          const existing = state.submissions.some(
-            (item: any) => item.id === submission.id,
-          );
+        for (
+          const submission of
+          body.next.submissions || []
+        ) {
+          const existing =
+            state.submissions.some(
+              (item: any) =>
+                item.id === submission.id,
+            );
 
           if (!existing && submission.attachment) {
             must(
@@ -577,28 +774,42 @@ Deno.serve(async (req) => {
           }
         }
 
-        body.next.lessons?.forEach((lesson: any) => {
-          delete lesson.hasVideo;
-        });
+        body.next.lessons?.forEach(
+          (lesson: any) => {
+            delete lesson.hasVideo;
+          },
+        );
       }
 
       applyUpdate(
         state,
         user,
         admin
-          ? adminUpdate(state, user, body.next)
+          ? adminUpdate(
+              state,
+              user,
+              body.next,
+            )
           : body.next,
       );
     } else if (body.action === "student") {
       must(admin);
 
-      const { draft, selected, settings } = body;
+      const {
+        draft,
+        selected,
+        settings,
+      } = body;
 
       const existing = state.users.find(
-        (account: any) => account.id === draft.id,
+        (account: any) =>
+          account.id === draft.id,
       );
 
-      must(!existing || existing.role === "student");
+      must(
+        !existing ||
+          existing.role === "student",
+      );
 
       const username = availableUsername(
         state,
@@ -619,12 +830,16 @@ Deno.serve(async (req) => {
         notes: draft.notes || "",
         active: draft.active === true,
         accessMode:
-          draft.accessMode === "deposit" ? "deposit" : "active",
+          draft.accessMode === "deposit"
+            ? "deposit"
+            : "active",
         role: "student",
-        password:
-          existing ? "temporary-validation-only" : draft.password,
+        password: existing
+          ? "temporary-validation-only"
+          : draft.password,
         createdAt:
-          existing?.createdAt || new Date().toISOString(),
+          existing?.createdAt ||
+          new Date().toISOString(),
       };
 
       D.saveStudentWithPayment(
@@ -636,11 +851,12 @@ Deno.serve(async (req) => {
       );
 
       if (!existing) {
-        const { data, error } = await db.auth.admin.createUser({
-          email,
-          password: draft.password,
-          email_confirm: true,
-        });
+        const { data, error } =
+          await db.auth.admin.createUser({
+            email,
+            password: draft.password,
+            email_confirm: true,
+          });
 
         if (error) throw error;
 
@@ -660,7 +876,9 @@ Deno.serve(async (req) => {
         delete account.password;
       });
 
-      result = { studentId: clean.id };
+      result = {
+        studentId: clean.id,
+      };
     } else if (body.action === "profile") {
       const fields = body.fields;
 
@@ -673,7 +891,9 @@ Deno.serve(async (req) => {
       const verified =
         await authClient().auth.signInWithPassword({
           email: user.email,
-          password: String(fields.currentPassword || ""),
+          password: String(
+            fields.currentPassword || "",
+          ),
         });
 
       must(
@@ -682,16 +902,22 @@ Deno.serve(async (req) => {
         "Joriy parol noto‘g‘ri.",
       );
 
-      must(fields.name?.trim().length >= 3);
+      must(
+        fields.name?.trim().length >= 3,
+      );
 
       must(
         !fields.phone ||
-          /^\+?[0-9 ()-]{7,20}$/.test(fields.phone),
+          /^\+?[0-9 ()-]{7,20}$/.test(
+            fields.phone,
+          ),
       );
 
       if (fields.avatarId) {
         must(
-          fields.avatarId.startsWith(user.id + "/uploads/"),
+          fields.avatarId.startsWith(
+            user.id + "/uploads/",
+          ),
         );
       }
 
@@ -699,7 +925,9 @@ Deno.serve(async (req) => {
         username,
         name: fields.name.trim(),
         phone: fields.phone?.trim() || "",
-        ...(fields.avatarId ? { avatarId: fields.avatarId } : {}),
+        ...(fields.avatarId
+          ? { avatarId: fields.avatarId }
+          : {}),
       });
     } else if (body.action === "certificate") {
       result = {
@@ -713,17 +941,18 @@ Deno.serve(async (req) => {
       throw Error("Noma’lum amal.");
     }
 
-    const { data: revision, error } = await db.rpc(
-      "academy_commit",
-      {
-        expected: row.revision,
-        document: state,
-        actor: user.id,
-        operation: body.action,
-      },
-    );
+    const {
+      data: revision,
+      error,
+    } = await db.rpc("academy_commit", {
+      expected: row.revision,
+      document: state,
+      actor: user.id,
+      operation: body.action,
+    });
 
     if (error) throw error;
+
     createdId = undefined;
 
     return response({

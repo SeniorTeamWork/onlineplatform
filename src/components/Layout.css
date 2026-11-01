@@ -50,6 +50,7 @@
 
 .nav-label {
   padding: 0 12px;
+  display: none;
 }
 
 .sidebar nav a {

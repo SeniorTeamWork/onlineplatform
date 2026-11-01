@@ -15,6 +15,7 @@ import {
 } from "../services/db";
 
 import { downloadCertificate } from "../services/certificate";
+import { useMarkTrialNoticeSeen } from "../hooks/useTrialNotifications";
 
 import StudentPasswordForm from "../components/StudentPasswordForm";
 import AdminStudentNote from "../components/AdminStudentNote";
@@ -28,6 +29,8 @@ import "./StudentDetail.css";
 
 export default function StudentDetail() {
   const { studentId } = useParams();
+
+  useMarkTrialNoticeSeen(studentId);
 
   const { data, user, update, notify } = useApp();
 
@@ -141,6 +144,7 @@ export default function StudentDetail() {
       <div className="page-heading">
         <div>
           <Avatar user={student} />
+
           <h1>{student.name}</h1>
 
           <p>
@@ -185,7 +189,8 @@ export default function StudentDetail() {
           [
             lessons.filter(
               (lesson) =>
-                data.progress[studentId]?.[lesson.id]?.watched
+                data.progress[studentId]?.[lesson.id]
+                  ?.watched
             ).length,
             "Ko‘rilgan video",
           ],
@@ -548,6 +553,7 @@ export default function StudentDetail() {
 
             <label>
               Sabab
+
               <textarea
                 name="reason"
                 required
@@ -555,10 +561,7 @@ export default function StudentDetail() {
               />
             </label>
 
-            <button
-              type="submit"
-              className="primary"
-            >
+            <button type="submit" className="primary">
               Ha, bekor qilish
             </button>
           </form>
@@ -573,6 +576,7 @@ export default function StudentDetail() {
           <form onSubmit={fee}>
             <label>
               Narx (so‘m)
+
               <MoneyInput
                 key={feeEdit.id}
                 name="fee"
@@ -582,10 +586,7 @@ export default function StudentDetail() {
               />
             </label>
 
-            <button
-              type="submit"
-              className="primary"
-            >
+            <button type="submit" className="primary">
               Saqlash
             </button>
           </form>

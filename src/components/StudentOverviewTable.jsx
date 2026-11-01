@@ -3,16 +3,11 @@ import { Link } from "react-router-dom";
 
 import { useApp } from "../context/AppContext";
 import { money } from "../services/db";
-
-import {
-  canAdmin,
-} from "../services/adminAccess";
-
-import {
-  studentOverview,
-} from "../services/adminOverview";
+import { canAdmin } from "../services/adminAccess";
+import { studentOverview } from "../services/adminOverview";
 
 import useFiveStudentScroll from "../hooks/useFiveStudentScroll";
+import { useTrialNotifications } from "../hooks/useTrialNotifications";
 
 export default function StudentOverviewTable({
   data,
@@ -35,6 +30,7 @@ export default function StudentOverviewTable({
   const lock = useRef(false);
 
   const canDelete = canAdmin(user, "students");
+  const unread = useTrialNotifications(data);
 
   const scrollRef = useFiveStudentScroll(
     JSON.stringify([
@@ -44,18 +40,12 @@ export default function StudentOverviewTable({
   );
 
   async function remove(student) {
-    if (
-      !canDelete ||
-      saving ||
-      lock.current
-    ) {
-      return;
-    }
+    if (!canDelete || saving || lock.current) return;
 
     const confirmed = window.confirm(
       `“${student.name}” talabani ro‘yxatdan o‘chirasizmi? ` +
-      "Saytga kirishi bloklanadi. " +
-      "To‘lov va o‘qish tarixi saqlanadi."
+        "Saytga kirishi bloklanadi. " +
+        "To‘lov va o‘qish tarixi saqlanadi."
     );
 
     if (!confirmed) return;
@@ -90,15 +80,10 @@ export default function StudentOverviewTable({
             deletedBy: user.id,
           });
 
-          for (
-            const [key, session] of
-            Object.entries(
-              state.testSessions || {}
-            )
-          ) {
-            if (
-              session?.userId === student.id
-            ) {
+          for (const [key, session] of Object.entries(
+            state.testSessions || {}
+          )) {
+            if (session?.userId === student.id) {
               delete state.testSessions[key];
             }
           }
@@ -123,11 +108,7 @@ export default function StudentOverviewTable({
       ref={limitRows ? scrollRef : undefined}
       className={
         "panel table-scroll" +
-        (
-          limitRows
-            ? " five-student-scroll"
-            : ""
-        )
+        (limitRows ? " five-student-scroll" : "")
       }
     >
       <table>
@@ -184,6 +165,25 @@ export default function StudentOverviewTable({
                       student.id
                     }
                   >
+                    {unread.has(student.id) && (
+                      <span
+                        role="img"
+                        aria-label="Birinchi dars ko‘rilgan va testi topshirilgan"
+                        title="Birinchi dars ko‘rilgan va testi topshirilgan"
+                        style={{
+                          display: "inline-block",
+                          width: 9,
+                          height: 9,
+                          marginRight: 8,
+                          borderRadius: "50%",
+                          background: "#16a34a",
+                          verticalAlign: "middle",
+                          boxShadow:
+                            "0 0 0 3px rgba(22,163,74,.12)",
+                        }}
+                      />
+                    )}
+
                     {student.name} →
                   </Link>
 
@@ -222,14 +222,11 @@ export default function StudentOverviewTable({
                   {summary.total} yakunlangan
 
                   <small>
-                    {summary.watched} ta video
-                    ko‘rilgan
+                    {summary.watched} ta video ko‘rilgan
                   </small>
                 </td>
 
-                <td>
-                  {summary.accountStatus}
-                </td>
+                <td>{summary.accountStatus}</td>
 
                 {(onEdit || canDelete) && (
                   <td>
@@ -280,7 +277,7 @@ export default function StudentOverviewTable({
         <p className="empty">
           Talabalar topilmadi.
         </p>
-      )}a
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { PlayCircle, Lock, Check, Play } from "lucide-react";
 
 import { useApp } from "../context/AppContext";
 import { cloudEnabled, mediaUrl } from "../services/cloud";
+
 import {
   getFile,
   putFile,
@@ -15,14 +16,22 @@ import {
   completed,
 } from "../services/db";
 
+import { firstTrialLesson } from "../services/trialNotifications";
+
 import "./Lesson.css";
 
-function Player({ lesson, onEnd, watermark }) {
+function Player({ lesson, onEnd, onStart, watermark }) {
   const fileId = String(lesson.fileId || "").trim();
   const videoUrl = String(lesson.video || "").trim();
-  const sourceKey = JSON.stringify([lesson.id, fileId, videoUrl]);
 
-  const [attempt, setAttempt] = useState(0);
+  const sourceKey = JSON.stringify([
+    lesson.id,
+    fileId,
+    videoUrl,
+  ]);
+
+  const [attempt] = useState(0);
+
   const [media, setMedia] = useState({
     key: "",
     src: "",
@@ -31,6 +40,7 @@ function Player({ lesson, onEnd, watermark }) {
 
   const request = useRef(0);
   const diagnostic = useRef(null);
+
   const key = sourceKey + ":" + attempt;
 
   useEffect(() => {
@@ -47,11 +57,16 @@ function Player({ lesson, onEnd, watermark }) {
 
         if (fileId) {
           const file = await (
-            cloudEnabled ? mediaUrl(fileId) : getFile(fileId)
+            cloudEnabled
+              ? mediaUrl(fileId)
+              : getFile(fileId)
           );
 
           if (request.current !== ticket) return;
-          if (!file) throw Error("Video fayli topilmadi.");
+
+          if (!file) {
+            throw Error("Video fayli topilmadi.");
+          }
 
           if (cloudEnabled) {
             src = file;
@@ -83,6 +98,7 @@ function Player({ lesson, onEnd, watermark }) {
 
     return () => {
       ++request.current;
+
       diagnostic.current?.abort();
 
       if (objectUrl) {
@@ -92,7 +108,9 @@ function Player({ lesson, onEnd, watermark }) {
   }, [key, fileId, videoUrl]);
 
   const current =
-    media.key === key ? media : { src: "", error: "" };
+    media.key === key
+      ? media
+      : { src: "", error: "" };
 
   const hasVideo = Boolean(fileId || videoUrl);
 
@@ -126,11 +144,6 @@ function Player({ lesson, onEnd, watermark }) {
     const controller = new AbortController();
     diagnostic.current = controller;
 
-    // const timer = setTimeout(
-    //   () => controller.abort(),
-    //   8000
-    // );
-
     const timer = setTimeout(
       () => controller.abort(),
       300000
@@ -146,17 +159,16 @@ function Player({ lesson, onEnd, watermark }) {
       const type =
         result.headers.get("content-type") || "noma’lum";
 
-      // Tekshiruv uchun butun videoni yuklab olmaymiz.
       await result.body?.cancel();
 
       show(
         `Video xatosi: ${code}. ` +
-        `HTTP: ${result.status}. Fayl turi: ${type}.`
+          `HTTP: ${result.status}. Fayl turi: ${type}.`
       );
     } catch {
       show(
         `Video xatosi: ${code}. Video havolasini tekshirib bo‘lmadi. ` +
-        "Internet yoki serverga ulanishni tekshiring."
+          "Internet yoki serverga ulanishni tekshiring."
       );
     } finally {
       clearTimeout(timer);
@@ -170,55 +182,50 @@ function Player({ lesson, onEnd, watermark }) {
   if (!hasVideo || !current.src || current.error) {
     return (
       <div className="video-empty" role="status">
-        <PlayCircle size={52} />
+        {current.error ? (
+          current.src ? (
+            <a
+              href={current.src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="secondary"
+            >
+              Videoni alohida ochish
+            </a>
+          ) : (
+            <p>
+              Video havolasi olinmadi. Sahifani yangilang.
+            </p>
+          )
+        ) : (
+          <>
+            <PlayCircle size={52} />
 
-        <h3>
-          {!hasVideo
-            ? "Video hali yuklanmagan"
-            : current.error
-              ? "Video ochilmadi"
-              : "Video yuklanmoqda…"}
-        </h3>
+            <h3>
+              {hasVideo
+                ? "Video yuklanmoqda…"
+                : "Video hali yuklanmagan"}
+            </h3>
 
-        <p>
-          {!hasVideo
-            ? "Ushbu darsga video joylashtirilgach, shu yerda ko‘rinadi."
-            : current.error || "Iltimos, kuting."}
-        </p>
-
-        {/* {current.error && (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => setAttempt((value) => value + 1)}
-          >
-            Qayta urinish
-          </button>
-
-        )} */}
-
-        {current.error && current.src && (
-          <a
-            href={current.src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="secondary"
-          >
-            Videoni alohida ochish
-          </a>
+            <p>
+              {hasVideo
+                ? "Iltimos, kuting."
+                : "Ushbu darsga video joylashtirilgach, shu yerda ko‘rinadi."}
+            </p>
+          </>
         )}
-
       </div>
     );
   }
-
 
   return (
     <div
       className="protected-video"
       onContextMenu={(event) => event.preventDefault()}
     >
-      <div className="video-watermark">{watermark}</div>
+      <div className="video-watermark">
+        {watermark}
+      </div>
 
       <video
         key={key}
@@ -230,6 +237,23 @@ function Player({ lesson, onEnd, watermark }) {
         controlsList="nodownload noremoteplayback"
         disablePictureInPicture
         disableRemotePlayback
+        onTimeUpdate={(event) => {
+          const video = event.currentTarget;
+
+          if (video.seeking) return;
+
+          let seconds = 0;
+
+          for (let i = 0; i < video.played.length; i++) {
+            seconds +=
+              video.played.end(i) -
+              video.played.start(i);
+          }
+
+          if (seconds >= 1) {
+            onStart?.();
+          }
+        }}
         onEnded={onEnd}
         onError={videoError}
       />
@@ -239,6 +263,7 @@ function Player({ lesson, onEnd, watermark }) {
 
 export default function Lesson() {
   const { id } = useParams();
+
   return <LessonContent key={id} id={id} />;
 }
 
@@ -261,7 +286,15 @@ function LessonContent({ id }) {
   const submitting = useRef(false);
   const watching = useRef(false);
 
-  const lesson = data.lessons.find((item) => item.id === id);
+  const startingVideo = useRef({
+    busy: false,
+    saved: false,
+    retryAt: 0,
+  });
+
+  const lesson = data.lessons.find(
+    (item) => item.id === id
+  );
 
   if (!lesson || !unlocked(data, user.id, id)) {
     return (
@@ -276,13 +309,17 @@ function LessonContent({ id }) {
   const session = data.testSessions[key];
 
   const attempts = data.attempts.filter(
-    (item) => item.userId === user.id && item.lessonId === id
+    (item) =>
+      item.userId === user.id &&
+      item.lessonId === id
   );
 
   const latest = attempts[attempts.length - 1];
 
   const practices = data.submissions.filter(
-    (item) => item.userId === user.id && item.lessonId === id
+    (item) =>
+      item.userId === user.id &&
+      item.lessonId === id
   );
 
   const courseLessons = data.lessons.filter(
@@ -357,6 +394,59 @@ function LessonContent({ id }) {
     }
   }
 
+  async function startedTrialVideo() {
+    const pending = startingVideo.current;
+
+    if (
+      pending.busy ||
+      pending.saved ||
+      Date.now() < pending.retryAt
+    ) {
+      return;
+    }
+
+    if (
+      firstTrialLesson(data, lesson.courseId)?.id !== id
+    ) {
+      return;
+    }
+
+    const progress = data.progress[user.id]?.[id];
+
+    if (progress?.trialStartedAt || progress?.watched) {
+      pending.saved = true;
+      return;
+    }
+
+    pending.busy = true;
+
+    try {
+      if (cloud) {
+        await command("startTrialLesson", {
+          lessonId: id,
+        });
+      } else {
+        const saved = await update((draft) => {
+          draft.progress[user.id] ??= {};
+          draft.progress[user.id][id] ??= {};
+
+          draft.progress[user.id][id].trialStartedAt ??=
+            new Date().toISOString();
+        });
+
+        if (!saved) {
+          throw Error("Video boshlanganligi saqlanmadi.");
+        }
+      }
+
+      pending.saved = true;
+    } catch {
+      pending.retryAt = Date.now() + 10000;
+    } finally {
+      pending.busy = false;
+    }
+  }
+
   async function watched() {
     if (
       watching.current ||
@@ -369,10 +459,13 @@ function LessonContent({ id }) {
 
     try {
       if (cloud) {
-        await command("watchLesson", { lessonId: id });
+        await command("watchLesson", {
+          lessonId: id,
+        });
       } else {
         await update((draft) => {
           draft.progress[user.id] ??= {};
+
           draft.progress[user.id][id] = {
             watched: true,
             watchedAt: new Date().toISOString(),
@@ -388,6 +481,7 @@ function LessonContent({ id }) {
 
   async function practice(event) {
     event.preventDefault();
+
     if (busy) return;
 
     setBusy(true);
@@ -426,6 +520,7 @@ function LessonContent({ id }) {
       if (saved) {
         setAnswer("");
         setAttachment(null);
+
         notify("Amaliy ish tarixga saqlandi.");
       }
     } catch (error) {
@@ -467,6 +562,7 @@ function LessonContent({ id }) {
             watermark={
               user.name + " · " + (user.username || user.id)
             }
+            onStart={startedTrialVideo}
             onEnd={watched}
           />
 
@@ -497,11 +593,13 @@ function LessonContent({ id }) {
                     {item.title}
                   </span>
 
-                  {done
-                    ? <Check size={18} />
-                    : open
-                      ? <Play size={18} />
-                      : <Lock size={18} />}
+                  {done ? (
+                    <Check size={18} />
+                  ) : open ? (
+                    <Play size={18} />
+                  ) : (
+                    <Lock size={18} />
+                  )}
                 </>
               );
 
@@ -588,7 +686,7 @@ function LessonContent({ id }) {
                         <input
                           type="radio"
                           name={question.id}
-                          required
+                          // required
                           disabled={busy}
                           checked={
                             (
@@ -662,9 +760,9 @@ function LessonContent({ id }) {
                 <summary>
                   {Number(attempt.score).toFixed(2)}%
                   {" · "}
-                  {new Date(attempt.createdAt).toLocaleString(
-                    "uz-UZ"
-                  )}
+                  {new Date(
+                    attempt.createdAt
+                  ).toLocaleString("uz-UZ")}
                 </summary>
 
                 {attempt.questions?.map((question) => (
@@ -695,6 +793,7 @@ function LessonContent({ id }) {
               <form onSubmit={practice}>
                 <label>
                   Javobingiz
+
                   <textarea
                     required
                     minLength={5}
@@ -708,6 +807,7 @@ function LessonContent({ id }) {
 
                 <label>
                   Ilova (ixtiyoriy, 20 MB gacha)
+
                   <input
                     key={attachment?.name || "empty"}
                     type="file"
@@ -760,11 +860,13 @@ function LessonContent({ id }) {
                 </p>
 
                 <strong>
-                  {{
-                    pending: "Tekshirilmoqda",
-                    approved: "Tasdiqlangan",
-                    rejected: "Qaytarilgan",
-                  }[submission.status]}
+                  {
+                    {
+                      pending: "Tekshirilmoqda",
+                      approved: "Tasdiqlangan",
+                      rejected: "Qaytarilgan",
+                    }[submission.status]
+                  }
                 </strong>
 
                 <p>Baho: {submission.grade ?? "—"} / 100</p>
