@@ -1,13 +1,14 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 import {
   firstTrialLesson,
   unreadTrialLessons,
   markTrialNoticeSeen,
 } from "../_shared/trialNotifications.js";
 
-import { createClient } from "npm:@supabase/supabase-js@2";
-
 import { deleteStudent } from "../_shared/deleteStudent.js";
 import { applyLessonDeletion } from "../_shared/deleteLesson.js";
+import { applyCourseDeletion } from "../_shared/deleteCourse.js";
 
 import {
   staffAction,
@@ -281,9 +282,7 @@ Deno.serve(async (req) => {
 
       must(target, "Talaba topilmadi.");
 
-      if (
-        !unreadTrialLessons(state, target.id).length
-      ) {
+      if (!unreadTrialLessons(state, target.id).length) {
         return response({
           data: clientView(state, user),
           revision: row.revision,
@@ -367,10 +366,9 @@ Deno.serve(async (req) => {
         .pop()
         ?.toLowerCase();
 
-      const video = [
-        "mp4",
-        "webm",
-      ].includes(ext || "");
+      const video = ["mp4", "webm"].includes(
+        ext || "",
+      );
 
       must(
         admin || !video,
@@ -490,9 +488,7 @@ Deno.serve(async (req) => {
         "Fayl havolasi bo‘sh.",
       );
 
-      return response({
-        url: data.signedUrl,
-      });
+      return response({ url: data.signedUrl });
     }
 
     if (body.action === "setStaffPassword") {
@@ -636,6 +632,16 @@ Deno.serve(async (req) => {
         user,
         body.userId,
       );
+    } else if (body.action === "deleteCourse") {
+      must(
+        admin && canAdmin(user, "lessons"),
+        "Kursni o‘chirishga ruxsat yo‘q.",
+      );
+
+      result = applyCourseDeletion(
+        state,
+        body.courseId,
+      );
     } else if (body.action === "deleteLesson") {
       must(
         admin && canAdmin(user, "lessons"),
@@ -759,11 +765,10 @@ Deno.serve(async (req) => {
           const submission of
           body.next.submissions || []
         ) {
-          const existing =
-            state.submissions.some(
-              (item: any) =>
-                item.id === submission.id,
-            );
+          const existing = state.submissions.some(
+            (item: any) =>
+              item.id === submission.id,
+          );
 
           if (!existing && submission.attachment) {
             must(

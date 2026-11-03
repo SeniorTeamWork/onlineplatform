@@ -1,0 +1,198 @@
+.course-delete-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.course-delete-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #e4eaf3;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.course-delete-card-info {
+  min-width: 0;
+}
+
+.course-delete-card h3 {
+  margin: 0 0 6px;
+  color: #172b4d;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.course-delete-card p {
+  margin: 0;
+  color: #75839a;
+  font-size: 13px;
+}
+
+.course-delete-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 12px;
+  color: #d12e49;
+  background: #fff0f2;
+  cursor: pointer;
+}
+
+.course-delete-trigger:hover:not(:disabled) {
+  background: #ffe1e6;
+}
+
+.course-delete-content {
+  padding-top: 8px;
+  text-align: center;
+}
+
+.course-delete-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 20px;
+  background: #fff0f2;
+  color: #d12e49;
+}
+
+.course-delete-content h3 {
+  margin: 0 0 12px;
+  font-size: 21px;
+  overflow-wrap: anywhere;
+}
+
+.course-delete-content p {
+  line-height: 1.65;
+}
+
+.course-delete-warning {
+  color: #bf2943;
+  font-size: 14px;
+}
+
+.course-delete-error {
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff0f2;
+  color: #b4233c;
+  overflow-wrap: anywhere;
+}
+
+.course-delete-slider {
+  position: relative;
+  isolation: isolate;
+  height: 64px;
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid #f3cad1;
+  border-radius: 999px;
+  background: #fff1f3;
+  user-select: none;
+}
+
+.course-delete-slider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(64px + (100% - 64px) * var(--slide));
+  background: #fbd0d8;
+  pointer-events: none;
+}
+
+.course-delete-slider-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 60px;
+  color: #a72c42;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.course-delete-slider .course-delete-slider-thumb {
+  position: absolute;
+  top: 5px;
+  left: calc(5px + (100% - 64px) * var(--slide));
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #d52d4b;
+  color: #fff;
+  box-shadow: 0 4px 12px #d52d4b30;
+  touch-action: none;
+  cursor: grab;
+  transition: left 180ms ease;
+}
+
+.course-delete-slider.is-dragging .course-delete-slider-thumb {
+  transition: none;
+  cursor: grabbing;
+}
+
+.course-delete-slider-thumb:focus-visible {
+  outline: 3px solid #173b73;
+  outline-offset: -4px;
+}
+
+.course-delete-cancel {
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
+  background: #fff;
+  color: #53627a;
+  cursor: pointer;
+}
+
+.course-delete-trigger:disabled,
+.course-delete-cancel:disabled,
+.course-delete-slider-thumb:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.course-delete-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .course-delete-card {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .course-delete-trigger {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .course-delete-content h3 {
+    font-size: 19px;
+  }
+}
